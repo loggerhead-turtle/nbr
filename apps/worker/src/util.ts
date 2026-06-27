@@ -17,7 +17,8 @@ export async function jitterDelay(minSec = 30, maxSec = 120): Promise<void> {
 export function envBool(name: string, fallback = false): boolean {
   const v = process.env[name];
   if (v == null) return fallback;
-  return v.toLowerCase() === "true" || v === "1";
+  const normalized = v.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes";
 }
 
 export function envNum(name: string, fallback: number): number {
