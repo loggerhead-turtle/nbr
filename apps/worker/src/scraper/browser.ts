@@ -49,12 +49,36 @@ export async function openSchedule(
   const url = `https://web.gc.com/teams/${gcTeamId}/schedule`;
   const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
 
-  // Give the SPA time to render; small human-like pauses + a scroll to load
-  // completed games that may be lazy-rendered.
+  // Give the SPA time to fetch + render; wait for network to settle, then a
+  // small human-like pause + a scroll to load lazy-rendered completed games.
+  await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   await sleep(randInt(1500, 3500));
   await humanScroll(page);
+  await sleep(randInt(800, 1600));
 
   return { page, httpStatus: response?.status() ?? null };
+}
+
+/**
+ * Diagnostic snapshot of the rendered page — used to tune the parser against
+ * GameChanger's real (obfuscated) DOM. Enabled via SCRAPER_DEBUG.
+ */
+export async function pageDiagnostics(page: Page): Promise<unknown> {
+  return page.evaluate(() => {
+    const anchors = Array.from(document.querySelectorAll("a[href]")) as HTMLAnchorElement[];
+    const gameLinks = anchors.filter((a) => /\/games?\//.test(a.getAttribute("href") || ""));
+    const bodyText = (document.body?.innerText || "").replace(/\s+/g, " ").trim();
+    return {
+      url: window.location.href,
+      title: document.title,
+      anchorCount: anchors.length,
+      gameLinkCount: gameLinks.length,
+      gameLinkSamples: gameLinks.slice(0, 8).map((a) => a.getAttribute("href")),
+      hasFinalText: /\bfinal\b/i.test(bodyText),
+      hasScorePattern: /\b\d{1,2}\s*[-–]\s*\d{1,2}\b/.test(bodyText),
+      bodyTextSample: bodyText.slice(0, 2500),
+    };
+  });
 }
 
 async function humanScroll(page: Page): Promise<void> {

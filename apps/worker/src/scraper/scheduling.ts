@@ -16,6 +16,7 @@
  * is touched at most ~once per week in practice.
  */
 import { prisma } from "@nbr/db";
+import { envBool } from "../util.js";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -49,6 +50,14 @@ export async function selectTeamsToScrape(params: ScheduleParams): Promise<DueTe
   });
 
   const due: DueTeam[] = [];
+
+  // SCRAPER_FORCE bypasses all cadence rules (backoff, weekday, dormancy) and
+  // scrapes every enabled team — for testing/iterating on the parser only.
+  if (envBool("SCRAPER_FORCE")) {
+    return teams
+      .filter((t) => t.gcTeamId)
+      .map((t) => ({ id: t.id, gcTeamId: t.gcTeamId!, name: t.name, reason: "initial" as const }));
+  }
 
   for (const t of teams) {
     if (!t.gcTeamId) continue;

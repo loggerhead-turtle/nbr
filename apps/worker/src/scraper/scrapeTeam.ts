@@ -6,9 +6,10 @@
 import { prisma, ScrapeStatus } from "@nbr/db";
 import { normalizeTeamName, teamSlug } from "@nbr/core";
 import type { BrowserContext } from "playwright";
-import { openSchedule } from "./browser.js";
+import { openSchedule, pageDiagnostics } from "./browser.js";
 import { parseSchedule, type ParsedGame } from "./parseSchedule.js";
 import { computeNextScrapeAfter, type DueTeam } from "./scheduling.js";
+import { envBool } from "../util.js";
 
 const MAX_CONSECUTIVE_FAILURES = 5;
 
@@ -37,6 +38,15 @@ export async function scrapeTeam(
   try {
     const { page, httpStatus: hs } = await openSchedule(context, team.gcTeamId);
     httpStatus = hs;
+
+    if (envBool("SCRAPER_DEBUG")) {
+      try {
+        const diag = await pageDiagnostics(page);
+        console.log(`[scrape:debug] ${team.name}:`, JSON.stringify(diag));
+      } catch (e) {
+        console.log(`[scrape:debug] ${team.name}: diagnostics failed`, e);
+      }
+    }
 
     if (hs === 403 || hs === 429) {
       status = "BLOCKED";
