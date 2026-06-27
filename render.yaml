@@ -2,8 +2,34 @@
 # Web service runs Next.js (no Chromium). Two cron jobs run the worker:
 # a schedule-aware scraper and a semi-weekly rating recompute.
 #
-# Set DATABASE_URL / DIRECT_URL (Supabase) and the admin/scraper secrets in the
-# Render dashboard or a synced env group named "nbr".
+# The shared "nbr" env group is defined below so Render creates it on apply and
+# prompts for the secret values (DATABASE_URL/DIRECT_URL from Supabase, etc.).
+
+envVarGroups:
+  - name: nbr
+    envVars:
+      # Supabase Postgres — paste on apply. DATABASE_URL = pooled (6543),
+      # DIRECT_URL = direct (5432).
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      # Final public URL (drives SEO canonical links + sitemap).
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
+      # Admin login password — paste on apply.
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Cookie-signing secret — let Render generate a strong value.
+      - key: ADMIN_SESSION_SECRET
+        generateValue: true
+      # Scraper controls. Leave disabled until you're ready.
+      - key: SCRAPER_ENABLED
+        value: "false"
+      - key: SCRAPER_MAX_TEAMS_PER_RUN
+        value: "25"
+      - key: SCRAPER_POSTGAME_DELAY_HOURS
+        value: "2.5"
 
 services:
   - type: web
