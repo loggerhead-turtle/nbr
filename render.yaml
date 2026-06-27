@@ -10,7 +10,7 @@ services:
     name: nbr-web
     runtime: node
     plan: starter
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @nbr/db generate && pnpm --filter @nbr/web build
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @nbr/db generate && pnpm --filter @nbr/db migrate && pnpm --filter @nbr/web build
     startCommand: pnpm --filter @nbr/web start
     autoDeploy: true
     envVars:
