@@ -57,12 +57,15 @@ services:
       - fromGroup: nbr
 
   # Rating recompute, semi-weekly (Sun & Wed mornings, after weekend/Mon games).
+  # Recompute needs no browser, so it runs on the plain Node runtime (no Docker).
   - type: cron
     name: nbr-recompute
-    runtime: docker
-    dockerfilePath: ./apps/worker/Dockerfile
-    dockerCommand: pnpm --filter @nbr/worker recompute
+    runtime: node
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm --filter @nbr/db generate
+    startCommand: pnpm --filter @nbr/worker recompute
     schedule: "0 8 * * 0,3"
     autoDeploy: true
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - fromGroup: nbr
