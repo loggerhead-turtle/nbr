@@ -1,0 +1,42 @@
+# Render blueprint for National Baseball Ratings.
+# Web service runs Next.js (no Chromium). Two cron jobs run the worker:
+# a schedule-aware scraper and a semi-weekly rating recompute.
+#
+# Set DATABASE_URL / DIRECT_URL (Supabase) and the admin/scraper secrets in the
+# Render dashboard or a synced env group named "nbr".
+
+services:
+  - type: web
+    name: nbr-web
+    runtime: node
+    plan: starter
+    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @nbr/db generate && pnpm --filter @nbr/web build
+    startCommand: pnpm --filter @nbr/web start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - fromGroup: nbr
+
+  # Schedule-aware scraper. Runs hourly but only acts on teams that are "due"
+  # (post-game fetch ~2-3h after a game ends; weekly otherwise; monthly when
+  # dormant). Needs Chromium, so use a Docker runtime for reliable system deps.
+  - type: cron
+    name: nbr-scraper
+    runtime: docker
+    dockerfilePath: ./apps/worker/Dockerfile
+    schedule: "17 * * * *" # hourly, at :17 (avoids round-number patterns)
+    autoDeploy: true
+    envVars:
+      - fromGroup: nbr
+
+  # Rating recompute, semi-weekly (Sun & Wed mornings, after weekend/Mon games).
+  - type: cron
+    name: nbr-recompute
+    runtime: docker
+    dockerfilePath: ./apps/worker/Dockerfile
+    dockerCommand: node --import tsx apps/worker/src/index.ts recompute
+    schedule: "0 8 * * 0,3"
+    autoDeploy: true
+    envVars:
+      - fromGroup: nbr

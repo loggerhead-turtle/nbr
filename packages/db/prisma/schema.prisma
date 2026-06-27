@@ -1,0 +1,358 @@
+// National Baseball Ratings — Prisma schema
+// MVP tables + Phase 2 tables (users / claims / reports / scrimmage) defined up
+// front so Phase 2 is an additive migration. See docs/DESIGN notes in the repo.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum AgeGroup {
+  U8
+  U9
+  U10
+  U11
+  U12
+  U13
+  U14
+  U15
+  U16
+  U17
+  U18
+  OPEN
+}
+
+enum GameStatus {
+  SCHEDULED
+  FINAL
+  CANCELED
+}
+
+enum GameSource {
+  SCRAPE
+  MANUAL
+}
+
+enum RunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum ScrapeStatus {
+  SUCCESS
+  FAILED
+  BLOCKED
+  EMPTY
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REVOKED
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Core (MVP)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Team {
+  id       String    @id @default(cuid())
+  name     String
+  // GameChanger opaque team id (e.g. "21nCCNFQXjHB"). Null for manual/ghost teams.
+  gcTeamId String?   @unique
+  // URL-safe slug for SEO team pages, e.g. "slc-thunder-12u".
+  slug     String    @unique
+  ageGroup AgeGroup?
+  division String?
+
+  // Location (city/state shown publicly; zip + lat/long power Phase 2 proximity).
+  city      String?
+  state     String  @default("UT")
+  zip       String?
+  latitude  Float?
+  longitude Float?
+
+  isActive Boolean @default(true)
+  // Ghost teams are opponents auto-created from scraped games before an admin
+  // has formally added/enriched them. They still contribute to ratings.
+  isGhost  Boolean @default(false)
+
+  // Scraper controls.
+  scrapeEnabled       Boolean   @default(true)
+  lastScrapedAt       DateTime?
+  consecutiveFailures Int       @default(0)
+  // When the team appears dormant, the scraper backs off; this is the earliest
+  // time the team should be checked again.
+  nextScrapeAfter     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  homeGames     Game[]          @relation("HomeTeam")
+  awayGames     Game[]          @relation("AwayTeam")
+  rating        Rating?
+  ratingHistory RatingHistory[]
+  scrapeJobs    ScrapeJob[]
+
+  // Phase 2 relations
+  claim         Claim?
+  reports       Report[]
+  scrimmagePref ScrimmagePref?
+
+  @@index([state, ageGroup])
+  @@index([isGhost])
+  @@index([scrapeEnabled, nextScrapeAfter])
+}
+
+model Game {
+  id String @id @default(cuid())
+  // GameChanger opaque game id; the hard dedup key. Null for manual entries.
+  gcGameId String? @unique
+
+  homeTeamId String
+  awayTeamId String
+  homeTeam   Team   @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: Cascade)
+  awayTeam   Team   @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: Cascade)
+
+  homeScore Int?
+  awayScore Int?
+  status    GameStatus @default(SCHEDULED)
+  playedAt  DateTime
+  // Tournament/neutral games skip the home-field adjustment in the rating engine.
+  neutralSite Boolean @default(false)
+
+  source GameSource @default(SCRAPE)
+  // Set when a rating run has incorporated this game (enables idempotent reruns).
+  ratedAt DateTime?
+
+  createdByUserId String? // Phase 2 audit for manual entries
+  notes           String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, playedAt])
+  @@index([homeTeamId, playedAt])
+  @@index([awayTeamId, playedAt])
+}
+
+// Current/latest rating per team — read-optimized for the public ratings page.
+model Rating {
+  id     String @id @default(cuid())
+  teamId String @unique
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  rating      Float @default(1500)
+  rd          Float @default(350)
+  volatility  Float @default(0.06)
+  gamesPlayed Int   @default(0)
+  // Provisional while RD is high or games are few; flagged/demoted in rankings.
+  isProvisional Boolean @default(true)
+
+  wins   Int @default(0)
+  losses Int @default(0)
+  ties   Int @default(0)
+
+  // Connected-component id from the game graph (ratings only comparable within).
+  componentId String?
+
+  computedAt DateTime @default(now())
+
+  @@index([rating])
+  @@index([isProvisional, rating])
+  @@index([componentId])
+}
+
+// Append-only snapshot, one row per team per rating run — powers history charts.
+model RatingHistory {
+  id     String @id @default(cuid())
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  rating      Float
+  rd          Float
+  volatility  Float
+  gamesPlayed Int
+
+  runId String
+  run   RatingRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  asOf  DateTime  @default(now())
+
+  @@index([teamId, asOf])
+  @@index([runId])
+}
+
+// One row per recompute job execution — observability + reproducibility.
+model RatingRun {
+  id               String    @id @default(cuid())
+  startedAt        DateTime  @default(now())
+  finishedAt       DateTime?
+  status           RunStatus @default(RUNNING)
+  gamesProcessed   Int       @default(0)
+  teamsAffected    Int       @default(0)
+  algorithmVersion String    @default("glicko2-v1")
+  error            String?
+
+  history RatingHistory[]
+
+  @@index([startedAt])
+}
+
+// Scraper audit + politeness observability.
+model ScrapeJob {
+  id     String  @id @default(cuid())
+  teamId String?
+  team   Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  startedAt  DateTime     @default(now())
+  finishedAt DateTime?
+  status     ScrapeStatus @default(SUCCESS)
+  gamesFound Int          @default(0)
+  gamesNew   Int          @default(0)
+  httpStatus Int?
+  error      String?
+
+  @@index([teamId, startedAt])
+  @@index([status, startedAt])
+}
+
+// Optional persistence for shareable pool-generator results (no auth needed).
+model TournamentPool {
+  id        String   @id @default(cuid())
+  token     String   @unique // unguessable share token for /pools/{token}
+  name      String?
+  numPools  Int
+  config    Json // snapshot of selected teams + ratings at generation time
+  result    Json // computed pool assignments + balance metrics
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 2 — users / claims / reports / scrimmage.
+// Defined now so they require only additive migrations; not wired into the MVP UI.
+// NextAuth-compatible Account/Session/VerificationToken included for later use.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  firstName     String?
+  lastName      String?
+  email         String    @unique
+  phone         String?
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  claims        Claim[]
+  reports       Report[]
+  scrimmagePref ScrimmagePref[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Claim {
+  id     String @id @default(cuid())
+  teamId String @unique // one active claim per team
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status ClaimStatus @default(PENDING)
+  // Claimer's first/last name is public; email/phone revealed only to registered
+  // users AND only when the coach opts in.
+  contactOptIn Boolean @default(false)
+
+  createdAt  DateTime  @default(now())
+  approvedAt DateTime?
+
+  reports Report[]
+}
+
+model Report {
+  id           String       @id @default(cuid())
+  teamId       String
+  team         Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  claimId      String?
+  claim        Claim?       @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  reporterUserId String?
+  reporter     User?        @relation(fields: [reporterUserId], references: [id], onDelete: SetNull)
+  reason       String
+  details      String?
+  status       ReportStatus @default(OPEN)
+  createdAt    DateTime     @default(now())
+
+  @@index([status, createdAt])
+}
+
+model ScrimmagePref {
+  id     String @id @default(cuid())
+  teamId String @unique
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  seekingScrimmage Boolean @default(false)
+  maxDistanceMiles Int?
+  notes            String?
+
+  updatedAt DateTime @updatedAt
+}

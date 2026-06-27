@@ -1,0 +1,27 @@
+{
+  "name": "nbr",
+  "version": "0.1.0",
+  "private": true,
+  "description": "National Baseball Ratings — a UTR-style rating system for amateur baseball teams.",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:generate": "pnpm --filter @nbr/db generate",
+    "db:migrate": "pnpm --filter @nbr/db migrate",
+    "db:push": "pnpm --filter @nbr/db push",
+    "db:seed": "pnpm --filter @nbr/db seed",
+    "web:dev": "pnpm --filter @nbr/web dev",
+    "worker:scrape": "pnpm --filter @nbr/worker scrape",
+    "worker:recompute": "pnpm --filter @nbr/worker recompute"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}

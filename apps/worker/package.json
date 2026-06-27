@@ -1,0 +1,27 @@
+{
+  "name": "@nbr/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "scrape": "tsx src/index.ts scrape",
+    "recompute": "tsx src/index.ts recompute",
+    "postinstall": "playwright install chromium || true",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"(lint via tsc)\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@nbr/core": "workspace:*",
+    "@nbr/db": "workspace:*",
+    "@nbr/ratings": "workspace:*",
+    "playwright": "1.49.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
