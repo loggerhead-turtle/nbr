@@ -36,7 +36,7 @@ services:
     name: nbr-web
     runtime: node
     plan: starter
-    buildCommand: pnpm install --frozen-lockfile && pnpm --filter @nbr/db generate && pnpm --filter @nbr/db migrate && pnpm --filter @nbr/web build
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm --filter @nbr/db generate && pnpm --filter @nbr/db migrate && pnpm --filter @nbr/web build
     startCommand: pnpm --filter @nbr/web start
     autoDeploy: true
     envVars:
@@ -61,7 +61,7 @@ services:
     name: nbr-recompute
     runtime: docker
     dockerfilePath: ./apps/worker/Dockerfile
-    dockerCommand: node --import tsx apps/worker/src/index.ts recompute
+    dockerCommand: pnpm --filter @nbr/worker recompute
     schedule: "0 8 * * 0,3"
     autoDeploy: true
     envVars:
