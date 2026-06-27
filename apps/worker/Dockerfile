@@ -8,8 +8,8 @@ WORKDIR /app
 # Browsers ship in the base image; never try to download them.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
-# Enable pnpm via corepack.
-RUN corepack enable
+# Install pnpm directly (corepack's download is unreliable in this base image).
+RUN npm install -g pnpm@10.33.0
 
 # Copy the whole repo, then install. We must include dev dependencies
 # (--prod=false) because the worker runs via tsx and generates the Prisma client.
