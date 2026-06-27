@@ -24,7 +24,7 @@ export interface DueTeam {
   id: string;
   gcTeamId: string;
   name: string;
-  reason: "postgame" | "weekly" | "dormant-monthly";
+  reason: "initial" | "postgame" | "weekly" | "dormant-monthly";
 }
 
 export interface ScheduleParams {
@@ -54,6 +54,14 @@ export async function selectTeamsToScrape(params: ScheduleParams): Promise<DueTe
     if (!t.gcTeamId) continue;
     // Respect an active backoff window.
     if (t.nextScrapeAfter && t.nextScrapeAfter > now) continue;
+
+    // 0) Initial backfill: a team we've never scraped is visited promptly on any
+    //    weekday to discover its schedule and past games. The polite, weekday-
+    //    restricted cadence applies only after this first scrape.
+    if (!t.lastScrapedAt) {
+      due.push({ id: t.id, gcTeamId: t.gcTeamId, name: t.name, reason: "initial" });
+      continue;
+    }
 
     // 1) Post-game: a known game whose result we likely don't have yet
     //    (a SCHEDULED game whose start was before the post-game cutoff).
