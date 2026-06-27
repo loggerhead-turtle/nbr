@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma, GameSource, GameStatus } from "@nbr/db";
-import { createTeamSchema, createGameSchema, teamSlug } from "@nbr/core";
+import { createTeamSchema, createGameSchema, teamSlug, gcTeamIdSchema } from "@nbr/core";
 import {
   ADMIN_COOKIE,
   adminCookieOptions,
@@ -160,4 +160,69 @@ export async function createGameAction(
     ok: true,
     message: "Game recorded. Run a rating recompute to update ratings.",
   };
+}
+
+export async function updateTeamAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const id = String(formData.get("teamId") ?? "");
+  if (!id) return { error: "Missing team id." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (name.length < 2) return { error: "Name is too short." };
+
+  const rawGc = String(formData.get("gcTeamId") ?? "").trim();
+  let gcTeamId: string | null = null;
+  if (rawGc) {
+    const parsed = gcTeamIdSchema.safeParse(rawGc);
+    if (!parsed.success) {
+      return { error: parsed.error.errors[0]?.message ?? "Invalid GameChanger ID." };
+    }
+    gcTeamId = parsed.data;
+    // Guard against linking an ID already used by another team.
+    const clash = await prisma.team.findUnique({ where: { gcTeamId } });
+    if (clash && clash.id !== id) {
+      return { error: `That GameChanger ID is already linked to “${clash.name}”.` };
+    }
+  }
+
+  const scrapeEnabled = formData.get("scrapeEnabled") === "on";
+
+  try {
+    await prisma.team.update({
+      where: { id },
+      data: {
+        name,
+        gcTeamId,
+        scrapeEnabled,
+        // Reset scrape bookkeeping so a corrected ID gets re-scraped promptly.
+        lastScrapedAt: null,
+        nextScrapeAfter: null,
+        consecutiveFailures: 0,
+      },
+    });
+  } catch {
+    return { error: "Could not update the team." };
+  }
+
+  revalidatePath("/admin/teams");
+  revalidatePath("/");
+  return { ok: true, message: "Saved." };
+}
+
+export async function deleteTeamAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("teamId") ?? "");
+  if (!id) return;
+  try {
+    // Games cascade with the team (see schema relations).
+    await prisma.team.delete({ where: { id } });
+  } catch {
+    // Ignore — team may already be gone.
+  }
+  revalidatePath("/admin/teams");
+  revalidatePath("/");
 }

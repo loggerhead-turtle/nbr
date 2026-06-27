@@ -14,6 +14,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Dashboard
           </Link>
           <Link
+            href="/admin/teams"
+            className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Manage teams
+          </Link>
+          <Link
             href="/admin/teams/new"
             className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
           >
