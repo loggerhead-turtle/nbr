@@ -1,17 +1,23 @@
 /**
- * Defensive parser for a GameChanger public team schedule page.
+ * Parser for a GameChanger public team schedule page.
  *
- * IMPORTANT: GameChanger ships an obfuscated SPA whose CSS class names are hashed
- * and change frequently. We therefore parse on STABLE anchors only:
- *   - links to game detail pages (href contains "/game(s)/<id>") → the game id;
- *   - the word "Final" → a completed game;
- *   - a score pattern like "7 - 3" or "7-3";
- *   - "vs" (home) / "@" (away) to infer home/away;
- *   - a parseable date near the row.
+ * GameChanger renders the schedule as plain text (no game-detail links, no
+ * "Final" labels). A team's schedule reads like:
  *
- * All knowledge of the DOM lives here. Every game is parsed in its own try/catch
- * so one malformed row can't sink the whole scrape, and the caller treats a
- * page that yields zero rows (while others succeed) as a possible layout break.
+ *   ... HOME SCHEDULE TEAM STATS Schedule
+ *   March 2026
+ *   SAT 7  @ GBG Utah 14U Navy L 3-4  vs. Cannons Baseball 14U L 1-7  @ Guerilla 14U W 4-2
+ *   MON 16 @ Lightning Baseball Ahrens 14U W 15-1
+ *   ...
+ *   MON 27 vs. Wasatch Baseball Club 14U 4:20 PM   <- upcoming (time, no result)
+ *
+ * So each completed game is:  (vs.|@) <Opponent> (W|L|T) <ourScore>-<theirScore>
+ * with the date carried from the most recent "Month YYYY" + "DOW D" headers.
+ * Upcoming games (a time instead of a W/L/T result) are ignored — only
+ * completed games feed the ratings.
+ *
+ * All DOM knowledge is the single `innerText` read in parseSchedule(); the rest
+ * is pure text parsing in parseScheduleText() so it is fully unit-testable.
  */
 import type { Page } from "playwright";
 
@@ -22,125 +28,80 @@ export interface ParsedGame {
   teamScore: number | null;
   opponentScore: number | null;
   isFinal: boolean;
-  playedAt: string | null; // ISO date string, best-effort
+  playedAt: string | null; // ISO date string
 }
 
-/** Extract raw game blocks from the rendered page, then parse each defensively. */
 export async function parseSchedule(page: Page): Promise<ParsedGame[]> {
-  // Pull lightweight, structured candidates out of the DOM in the page context.
-  const candidates = await page.evaluate(() => {
-    const out: { href: string | null; text: string }[] = [];
-    const anchors = Array.from(document.querySelectorAll("a[href]")) as HTMLAnchorElement[];
-    const seen = new Set<string>();
+  const text = await page.evaluate(() => document.body?.innerText ?? "");
+  return parseScheduleText(text);
+}
 
-    for (const a of anchors) {
-      const href = a.getAttribute("href") || "";
-      if (!/\/games?\//.test(href)) continue;
-      // Walk up to a reasonably-sized container holding the game's text.
-      let node: HTMLElement | null = a;
-      for (let i = 0; i < 4 && node?.parentElement; i++) {
-        node = node.parentElement;
-        if ((node.innerText || "").length > 25) break;
-      }
-      const text = (node?.innerText || a.innerText || "").replace(/\s+/g, " ").trim();
-      const key = `${href}|${text}`;
-      if (seen.has(key) || text.length < 3) continue;
-      seen.add(key);
-      out.push({ href, text });
-    }
-    return out;
-  });
+const MONTHS: Record<string, number> = {
+  january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
+  july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
+};
+
+// One regex, three alternatives, scanned left-to-right so date headers update
+// state before the games that follow them:
+//   1,2  Month YYYY
+//   3,4  DOW D            (day-of-month header)
+//   5    marker (vs.|@)
+//   6    opponent (stops before the next marker / a W·L·T result / a time)
+//   7    result (W|L|T)
+//   8,9  scores  our-their
+const MASTER = new RegExp(
+  [
+    "(January|February|March|April|May|June|July|August|September|October|November|December)\\s+(\\d{4})",
+    "(SUN|MON|TUE|WED|THU|FRI|SAT)\\s+(\\d{1,2})\\b",
+    "(vs\\.?|@)\\s+" +
+      "((?:(?!vs\\.?\\s|@\\s|(?:SUN|MON|TUE|WED|THU|FRI|SAT)\\s|[WLT]\\s\\d|\\d{1,2}:\\d{2}).)+?)" +
+      "\\s+([WLT])\\s+(\\d{1,2})-(\\d{1,2})",
+  ].join("|"),
+  "g",
+);
+
+export function parseScheduleText(rawText: string): ParsedGame[] {
+  // Collapse all whitespace so the scanner is line-break agnostic.
+  const text = rawText.replace(/\s+/g, " ").trim();
 
   const games: ParsedGame[] = [];
-  for (const c of candidates) {
-    try {
-      const parsed = parseOne(c.href, c.text);
-      if (parsed) games.push(parsed);
-    } catch {
-      // Skip malformed rows.
+  let curMonth: number | null = null;
+  let curYear: number | null = null;
+  let curDay: number | null = null;
+
+  let m: RegExpExecArray | null;
+  MASTER.lastIndex = 0;
+  while ((m = MASTER.exec(text)) !== null) {
+    if (m[1]) {
+      curMonth = MONTHS[m[1].toLowerCase()] ?? null;
+      curYear = Number(m[2]);
+    } else if (m[3]) {
+      curDay = Number(m[4]);
+    } else if (m[5]) {
+      const isHome = /^vs/i.test(m[5]);
+      const opponentName = cleanName(m[6] ?? "");
+      if (!opponentName) continue;
+      const teamScore = Number(m[8]);
+      const opponentScore = Number(m[9]);
+      const playedAt =
+        curMonth != null && curYear != null && curDay != null
+          ? new Date(Date.UTC(curYear, curMonth, curDay, 18, 0, 0)).toISOString()
+          : null;
+      games.push({
+        gcGameId: null,
+        opponentName,
+        isHome,
+        teamScore,
+        opponentScore,
+        isFinal: true,
+        playedAt,
+      });
     }
   }
-  return dedupeByGameId(games);
+  return games;
 }
 
-const GAME_ID_RE = /\/games?\/([A-Za-z0-9]{6,})/;
-const SCORE_RE = /\b(\d{1,2})\s*[-–]\s*(\d{1,2})\b/;
-// Anchor the date to a real month name so capitalized words like "Pioneers 7"
-// aren't mistaken for "Month Day".
-const DATE_RE =
-  /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(\d{1,2})(?:,?\s+(\d{4}))?\b/i;
-
-export function parseOne(href: string | null, text: string): ParsedGame | null {
-  const isFinal = /\bfinal\b/i.test(text);
-  // Only completed games matter for ratings; skip rows with no score/final.
-  const scoreMatch = text.match(SCORE_RE);
-  if (!isFinal && !scoreMatch) return null;
-
-  const gcGameId = href?.match(GAME_ID_RE)?.[1] ?? null;
-
-  // Home/away: "@ Opponent" = away; "vs Opponent" = home. Default to home.
-  const isAway = /(^|\s)@\s/.test(text) || /\baway\b/i.test(text);
-  const isHome = !isAway;
-
-  const opponentName = extractOpponent(text);
-  if (!opponentName) return null;
-
-  let teamScore: number | null = null;
-  let opponentScore: number | null = null;
-  if (scoreMatch) {
-    // GameChanger typically renders the followed team's score first on its own
-    // schedule page. We store both; the caller knows which team this page is for.
-    const a = Number(scoreMatch[1]);
-    const b = Number(scoreMatch[2]);
-    teamScore = a;
-    opponentScore = b;
-  }
-
-  return {
-    gcGameId,
-    opponentName,
-    isHome,
-    teamScore,
-    opponentScore,
-    isFinal: isFinal || scoreMatch != null,
-    playedAt: extractDate(text),
-  };
-}
-
-function extractOpponent(text: string): string | null {
-  // Take the chunk following "vs" or "@", trimmed of result/score/date noise.
-  const m = text.match(/(?:vs\.?|@)\s+([A-Za-z0-9][^|]*?)(?:\s+(?:Final|W|L|T)\b|\s+\d|$)/i);
-  let name = m?.[1]?.trim() ?? null;
-  if (!name) return null;
-  name = name
-    .replace(SCORE_RE, "")
-    .replace(/\b(final|home|away|won|lost|tie)\b/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-  return name.length >= 2 ? name.slice(0, 120) : null;
-}
-
-function extractDate(text: string): string | null {
-  const m = text.match(DATE_RE);
-  if (!m) return null;
-  const [, mon, day, year] = m;
-  const months: Record<string, number> = {
-    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
-    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
-  };
-  const mi = months[mon!.slice(0, 3).toLowerCase()];
-  if (mi == null) return null;
-  const y = year ? Number(year) : new Date().getUTCFullYear();
-  const d = new Date(Date.UTC(y, mi, Number(day), 18, 0, 0));
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-function dedupeByGameId(games: ParsedGame[]): ParsedGame[] {
-  const byId = new Map<string, ParsedGame>();
-  const noId: ParsedGame[] = [];
-  for (const g of games) {
-    if (g.gcGameId) byId.set(g.gcGameId, g);
-    else noId.push(g);
-  }
-  return [...byId.values(), ...noId];
+function cleanName(raw: string): string {
+  const name = raw.replace(/\s{2,}/g, " ").trim();
+  return name.length >= 2 ? name.slice(0, 120) : "";
 }
