@@ -13,6 +13,7 @@ import { runGeocode } from "./scraper/runGeocode.js";
 import { runRecompute } from "./ratings/runRecompute.js";
 import { runBacktest } from "./ratings/runBacktest.js";
 import { runAgeDiagnostics } from "./ratings/runAgeDiagnostics.js";
+import { runFindBadMerges } from "./maintenance/findBadMerges.js";
 
 async function main() {
   const command = process.argv[2];
@@ -42,9 +43,12 @@ async function main() {
     case "age-diagnostics":
       await runAgeDiagnostics();
       break;
+    case "find-bad-merges":
+      await runFindBadMerges(process.argv.slice(3));
+      break;
     default:
       console.error(
-        "Usage: node src/index.ts <scrape|scrape-one <gcTeamId>|scrape-new|maxpreps|geocode|recompute|backtest|age-diagnostics>",
+        "Usage: node src/index.ts <scrape|scrape-one <gcTeamId>|scrape-new|maxpreps|geocode|recompute|backtest|age-diagnostics|find-bad-merges>",
       );
       process.exitCode = 1;
   }
