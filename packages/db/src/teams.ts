@@ -1,4 +1,5 @@
-import { normalizeTeamName, ageGroupFromName, teamSlug } from "@nbr/core";
+import { normalizeTeamName, ageGroupFromName, teamSlug, scoreMerge } from "@nbr/core";
+import type { MergeScore } from "@nbr/core";
 import { prisma } from "./index";
 import type { AgeGroup } from "@prisma/client";
 
@@ -46,6 +47,121 @@ export async function findPromotableTeam(
   return { id: m.id, name: m.name, games: m._count.homeGames + m._count.awayGames };
 }
 
+/** States of a team's game-graph neighbours — a locality proxy when the team
+ * itself has no city (a name-only ghost). `otherId` is excluded so a pair being
+ * compared doesn't count each other. */
+async function teamRegionStates(teamId: string, otherId?: string): Promise<string[]> {
+  const games = await prisma.game.findMany({
+    where: { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] },
+    select: {
+      homeTeam: { select: { id: true, state: true, city: true, isGhost: true } },
+      awayTeam: { select: { id: true, state: true, city: true, isGhost: true } },
+    },
+    take: 300,
+  });
+  const states: string[] = [];
+  for (const g of games) {
+    const opp = g.homeTeam.id === teamId ? g.awayTeam : g.homeTeam;
+    if (opp.id === otherId) continue;
+    // Only trust a state we actually learned from the team's own page (it has a
+    // city); ghosts default to "UT" and would otherwise fake a locality match.
+    if (opp.city && opp.state) states.push(opp.state);
+  }
+  return states;
+}
+
+/** Count exact shared matchups (same opponent team + same day) between two teams. */
+async function sharedMatchupCount(aId: string, bId: string): Promise<number> {
+  const keysFor = async (teamId: string, otherId: string) => {
+    const games = await prisma.game.findMany({
+      where: { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] },
+      select: { homeTeamId: true, awayTeamId: true, playedAt: true },
+      take: 500,
+    });
+    const keys = new Set<string>();
+    for (const g of games) {
+      const oppId = g.homeTeamId === teamId ? g.awayTeamId : g.homeTeamId;
+      if (oppId === otherId) continue; // games directly against each other don't count
+      keys.add(`${oppId}|${g.playedAt.toISOString().slice(0, 10)}`);
+    }
+    return keys;
+  };
+  const [ka, kb] = await Promise.all([keysFor(aId, bId), keysFor(bId, aId)]);
+  let n = 0;
+  for (const k of ka) if (kb.has(k)) n += 1;
+  return n;
+}
+
+export interface AutoMergeTarget {
+  id: string;
+  name: string;
+  score: MergeScore;
+}
+
+/**
+ * Decide whether a freshly enriched team should absorb a same-name ghost, using
+ * the full confidence model rather than name+age alone. Returns the ghost ONLY
+ * when confidence is "high" (near-proof via shared games, or matching
+ * name+age+location/coach). Returns null when there is no candidate, when the
+ * match is ambiguous (2+ same-name ghosts), or when confidence is anything less
+ * — those are left for an admin to triage on the Possible-duplicates page.
+ */
+export async function findAutoMergeTarget(target: {
+  id: string;
+  name: string;
+  ageGroup: string | null;
+  city: string | null;
+  state: string | null;
+  coaches: string[];
+}): Promise<AutoMergeTarget | null> {
+  const norm = normalizeTeamName(target.name);
+  if (!norm) return null;
+  const firstToken = norm.split(" ")[0] ?? norm;
+
+  const candidates = await prisma.team.findMany({
+    where: { name: { contains: firstToken, mode: "insensitive" }, gcTeamId: null, id: { not: target.id } },
+    select: { id: true, name: true, ageGroup: true, city: true, state: true, coaches: true },
+    take: 50,
+  });
+
+  const matches = candidates.filter((c) => {
+    if (normalizeTeamName(c.name) !== norm) return false;
+    if (target.ageGroup) {
+      const candAge = c.ageGroup ?? ageGroupFromName(c.name);
+      if (candAge && candAge.toUpperCase() !== target.ageGroup.toUpperCase()) return false;
+    }
+    return true;
+  });
+  // 0 → nothing to merge; 2+ → genuinely ambiguous (e.g. "Stars 14U" in two
+  // regions) — never guess, hand it to the admin queue.
+  if (matches.length !== 1) return null;
+  const ghost = matches[0]!;
+
+  const [shared, ghostRegion, targetRegion] = await Promise.all([
+    sharedMatchupCount(target.id, ghost.id),
+    teamRegionStates(ghost.id, target.id),
+    teamRegionStates(target.id, ghost.id),
+  ]);
+
+  const score = scoreMerge({
+    nameA: target.name,
+    nameB: ghost.name,
+    ageA: target.ageGroup,
+    ageB: ghost.ageGroup ?? ageGroupFromName(ghost.name),
+    cityA: target.city,
+    cityB: ghost.city, // ghosts have no city → null, so no spurious match
+    stateA: target.state,
+    stateB: ghost.city ? ghost.state : null, // ignore a ghost's default "UT"
+    coachesA: target.coaches,
+    coachesB: ghost.coaches ?? [],
+    sharedGameCount: shared,
+    regionStatesA: targetRegion,
+    regionStatesB: ghostRegion,
+  });
+
+  return score.tier === "high" ? { id: ghost.id, name: ghost.name, score } : null;
+}
+
 /**
  * Merge `sourceId` into `targetId`: reassign games, transfer a GameChanger ID and
  * any missing fields, drop self-games and duplicate matchups, delete the source.
@@ -75,6 +191,7 @@ export async function mergeTeams(sourceId: string, targetId: string): Promise<vo
       ageGroup: target.ageGroup ?? source.ageGroup ?? null,
       city: target.city ?? source.city ?? null,
       zip: target.zip ?? source.zip ?? null,
+      coaches: target.coaches?.length ? target.coaches : source.coaches ?? [],
       isGhost: false,
       ...(target.gcTeamId || sourceGcId
         ? { lastScrapedAt: null, nextScrapeAfter: null, consecutiveFailures: 0 }
