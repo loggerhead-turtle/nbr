@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma, Prisma } from "@nbr/db";
 import { haversineMiles, effectiveDistanceMi } from "@nbr/core";
 import { getCurrentUser } from "@/lib/user-auth";
-import { sendScrimmageRequestAction } from "@/lib/scrimmage-actions";
+import { ScrimmageRequestControl } from "@/components/account/scrimmage-request-control";
 import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +41,18 @@ export default async function ScrimmagesPage({
     ? await loadCandidates(selected, selected.rating.rating, !!user)
     : [];
 
+  // Existing pending requests from the selected team, so each row can show
+  // "Request sent / Cancel" instead of the send form. Only meaningful when the
+  // viewer owns the selected team.
+  const pendingByTarget = new Map<string, string>();
+  if (selected && myTeamIds.has(selected.id)) {
+    const pending = await prisma.scrimmageRequest.findMany({
+      where: { fromTeamId: selected.id, status: "PENDING" },
+      select: { id: true, toTeamId: true },
+    });
+    for (const r of pending) pendingByTarget.set(r.toTeamId, r.id);
+  }
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <h1 className="text-2xl font-black text-navy-900">Find a scrimmage</h1>
@@ -62,6 +74,7 @@ export default async function ScrimmagesPage({
           candidates={candidates}
           signedIn={!!user}
           ownsSelected={myTeamIds.has(selected.id)}
+          pendingByTarget={pendingByTarget}
         />
       )}
     </div>
@@ -143,11 +156,13 @@ function Results({
   candidates,
   signedIn,
   ownsSelected,
+  pendingByTarget,
 }: {
   selected: { id: string; slug: string; name: string };
   candidates: Awaited<ReturnType<typeof loadCandidates>>;
   signedIn: boolean;
   ownsSelected: boolean;
+  pendingByTarget: Map<string, string>;
 }) {
   if (candidates.length === 0) {
     return (
@@ -201,12 +216,12 @@ function Results({
             {/* Scheduling is gated: logged-out → login; signed-in coach of the
                 selected team → real request; otherwise → claim the team. */}
             {signedIn && ownsSelected ? (
-              <form action={sendScrimmageRequestAction} className="flex w-full max-w-xs flex-col gap-2">
-                <input type="hidden" name="fromTeamId" value={selected.id} />
-                <input type="hidden" name="toTeamId" value={c.id} />
-                <input name="message" placeholder="Optional message" className="input text-sm" />
-                <button className="btn-primary">Request scrimmage</button>
-              </form>
+              <ScrimmageRequestControl
+                fromTeamId={selected.id}
+                toTeamId={c.id}
+                initialRequestId={pendingByTarget.get(c.id) ?? null}
+                targetClaimed={c.confirmed}
+              />
             ) : !signedIn ? (
               <Link
                 href={`/login?next=${encodeURIComponent(`/scrimmages?team=${selected.id}`)}`}
