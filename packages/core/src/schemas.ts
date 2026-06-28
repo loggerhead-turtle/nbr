@@ -52,6 +52,24 @@ export function isRatingAlgorithm(value: string): value is RatingAlgorithmId {
   return RATING_ALGORITHMS.some((a) => a.id === value);
 }
 
+/**
+ * Cross-age developmental step: how many rating points a team gains per age-year.
+ * Older youth teams are materially stronger, so the rating scale shifts each age
+ * group's baseline by this much, anchored at 14U = 0 (14U keeps a ~1500 center,
+ * younger sits below, older above). This single knob drives both the `bt-age-v1`
+ * model's prior and the admin cross-age preview.
+ */
+export const AGE_OFFSET_KEY = "ageOffsetStep";
+export const DEFAULT_AGE_STEP = 200;
+export const AGE_ANCHOR_YEAR = 14;
+
+/** Clamp a raw points-per-age-year value to a sane range. */
+export function clampAgeStep(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_AGE_STEP;
+  return Math.max(0, Math.min(1000, Math.round(n)));
+}
+
 // GameChanger opaque team ids are short alphanumeric strings (e.g. 21nCCNFQXjHB).
 export const gcTeamIdSchema = z
   .string()

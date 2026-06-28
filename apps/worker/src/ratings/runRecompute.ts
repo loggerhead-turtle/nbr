@@ -4,8 +4,13 @@
  * a failure leaves the last-good Rating table intact.
  */
 import { prisma } from "@nbr/db";
-import { computeRatings, computeRatingsBT, EngineGame, EngineOutput } from "@nbr/ratings";
-import { DEFAULT_RATING_ALGORITHM, isRatingAlgorithm } from "@nbr/core";
+import { computeRatings, computeRatingsBT, BT_SCALE, EngineGame, EngineOutput } from "@nbr/ratings";
+import {
+  AGE_OFFSET_KEY,
+  clampAgeStep,
+  DEFAULT_RATING_ALGORITHM,
+  isRatingAlgorithm,
+} from "@nbr/core";
 
 const RATING_ALGORITHM_KEY = "ratingAlgorithm";
 
@@ -88,11 +93,24 @@ export async function runRecompute(): Promise<void> {
           }
         }
       }
+
+      // The admin "points per age-year" setting drives the age-curve prior.
+      // Convert display points → θ units for the engine (default 200 pts/year).
+      const stepSetting = await prisma.appSetting
+        .findUnique({ where: { key: AGE_OFFSET_KEY } })
+        .catch(() => null);
+      const ageStepPoints = clampAgeStep(stepSetting?.value);
+      if (algorithm === "bt-age-v1") {
+        console.log(`[recompute] age-curve prior: ${ageStepPoints} pts/age-year`);
+      }
+
       output = computeRatingsBT(engineGames, {
         priorRating,
         level,
         seasonBoundaryTeams,
-        ...(algorithm === "bt-age-v1" ? { ageGroup } : {}),
+        ...(algorithm === "bt-age-v1"
+          ? { ageGroup, ageStepPrior: ageStepPoints / BT_SCALE }
+          : {}),
       });
     }
     console.log(

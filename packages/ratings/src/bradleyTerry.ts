@@ -69,8 +69,15 @@ const DEFAULTS = {
   halfLifeDays: 120,
   movCap: 1.0,
   lambda: 0.6,
-  ageStepPrior: 0.3,
-  ageCurveLambda: 1.0,
+  // ~1 θ unit/age-year ≈ 174 display points/year — the real developmental gap is
+  // large (a 9U almost never beats a 16U), so the prior must dominate the within-
+  // age spread. runRecompute overrides this from the admin "points/year" setting.
+  ageStepPrior: 1.0,
+  // Hold the curve firmly on the developmental prior; cross-age "bridge" games are
+  // sparse and positively selected (only strong young teams play up), so a weak
+  // prior gets compressed. High λ keeps the steps near the prior unless there's
+  // substantial unbiased evidence. Monotonicity is still the hard guarantee.
+  ageCurveLambda: 5.0,
   ageAnchorLambda: 0.5,
   enforceMonotone: true,
   maxIterations: 200,
@@ -78,6 +85,9 @@ const DEFAULTS = {
   provisionalRdThreshold: 110,
   provisionalMinGames: 5,
 };
+
+/** Age the unified scale is centered on for display (14U ≈ BASE/1500). */
+const AGE_ANCHOR_YEAR = 14;
 
 const SCALE = 173.7178; // display points per θ unit (matches the Glicko scale)
 const BASE = 1500;
@@ -344,6 +354,18 @@ export function computeRatingsBT(
       }
     }
     if (maxStep < opt.tolerance) break;
+  }
+
+  // Re-center the curve for display so 14U sits at the BASE (~1500): younger ages
+  // fall below it, older ages above. This is a uniform shift of every baseline —
+  // it changes no win probability or ranking, only where the familiar 1500 lands.
+  if (ageMode && presentAges.length > 0) {
+    const ref = presentAges.reduce((best, a) =>
+      Math.abs(ageYear(a)! - AGE_ANCHOR_YEAR) < Math.abs(ageYear(best)! - AGE_ANCHOR_YEAR) ? a : best,
+    );
+    const desired = opt.ageStepPrior * (ageYear(ref)! - AGE_ANCHOR_YEAR);
+    const shift = beta.get(ref)! - desired;
+    if (shift !== 0) for (const a of presentAges) beta.set(a, beta.get(a)! - shift);
   }
 
   // Final-pass Hessian diagonal for standard errors. In age mode a team's total

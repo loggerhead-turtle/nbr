@@ -121,6 +121,30 @@ describe("computeRatingsBT — age-baseline curve (bt-age-v1)", () => {
     expect(order(aged)).toEqual(order(plain));
   });
 
+  it("keeps a dominant young team below an average older team (the real fix)", () => {
+    // A 9U team that crushes every 9U peer, and an average 14U team, in separate
+    // islands (no cross-age games). With a realistic developmental prior the 14U
+    // baseline must sit well above even an undefeated 9U.
+    const ages2 = new Map<string, string>([
+      ["Y1", "U9"], ["Y2", "U9"], ["Y3", "U9"],
+      ["O1", "U14"], ["O2", "U14"], ["O3", "U14"],
+    ]);
+    const games: EngineGame[] = [];
+    // Y1 dominates the 9U pool; O-teams trade evenly in the 14U pool.
+    for (let r = 0; r < 4; r++) {
+      games.push(game("Y1", "Y2", 15, 0, r), game("Y1", "Y3", 16, 0, r + 10));
+      games.push(game("O1", "O2", 6, 5, r + 20), game("O2", "O3", 5, 4, r + 30));
+    }
+    const out = computeRatingsBT(games, { lambda: 0.3, ageGroup: ages2 });
+    const r = (id: string) => out.teams.get(id)!.rating;
+    // The undefeated 9U must NOT outrank a middling 14U.
+    expect(r("Y1")).toBeLessThan(r("O3"));
+    // Curve is centered so 14U ≈ 1500 and 9U sits clearly below it.
+    const curve = new Map(out.ageCurve!.map((c) => [c.ageGroup, c.baseline]));
+    expect(curve.get("U14")!).toBeGreaterThan(curve.get("U9")! + 400);
+    expect(Math.abs(curve.get("U14")! - 1500)).toBeLessThan(50);
+  });
+
   it("widens RD for an age that has no bridge games (rests on the prior)", () => {
     // Two disconnected age islands, no bridges at all.
     const games = [...baseGames];
