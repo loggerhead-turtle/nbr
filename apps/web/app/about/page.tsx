@@ -65,6 +65,18 @@ export default function AboutPage() {
         comparable — expect ratings to settle as the season’s results fill in.
       </Section>
 
+      <Section title="Comparing across age groups">
+        An 8U team and a 16U team shouldn’t land on the same number just because each dominates
+        its own bracket. NBR places every age group on <strong>one developmental scale</strong>,
+        so an average older team sits above an average younger one. The size of each step is
+        learned from the games where teams <strong>play up</strong> against an older age group —
+        those cross-age matchups are the bridges that line the brackets up. Because strong young
+        teams are the ones that tend to play up, the scale is held to a sensible, always-increasing
+        curve so a single upset can’t flip an entire age group above an older one. Comparisons{" "}
+        <strong>within</strong> an age group are always the most reliable; cross-age numbers firm
+        up as more teams play up. Filter by age group for the most direct comparison.
+      </Section>
+
       <Section title="Where the data comes from">
         Scores are compiled from publicly available game results and from games entered by our
         team. Ratings are refreshed on a weekly to semi-weekly basis.

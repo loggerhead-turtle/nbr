@@ -12,6 +12,7 @@ import { runMaxPreps } from "./scraper/runMaxPreps.js";
 import { runGeocode } from "./scraper/runGeocode.js";
 import { runRecompute } from "./ratings/runRecompute.js";
 import { runBacktest } from "./ratings/runBacktest.js";
+import { runAgeDiagnostics } from "./ratings/runAgeDiagnostics.js";
 
 async function main() {
   const command = process.argv[2];
@@ -38,9 +39,12 @@ async function main() {
     case "backtest":
       await runBacktest();
       break;
+    case "age-diagnostics":
+      await runAgeDiagnostics();
+      break;
     default:
       console.error(
-        "Usage: node src/index.ts <scrape|scrape-one <gcTeamId>|scrape-new|maxpreps|geocode|recompute|backtest>",
+        "Usage: node src/index.ts <scrape|scrape-one <gcTeamId>|scrape-new|maxpreps|geocode|recompute|backtest|age-diagnostics>",
       );
       process.exitCode = 1;
   }

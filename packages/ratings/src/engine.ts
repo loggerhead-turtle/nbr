@@ -72,6 +72,12 @@ export interface EngineOutput {
   gamesProcessed: number;
   periods: number;
   components: number;
+  /**
+   * Fitted age-group baseline curve on the DISPLAY scale (only set by the
+   * `bt-age-v1` engine). Maps an age-group key (e.g. "U12") to the baseline
+   * rating for an average team of that age. Ordered youngest → oldest.
+   */
+  ageCurve?: { ageGroup: string; baseline: number; bridgeGames: number }[];
 }
 
 /** Convert a final score into a Glicko score in [0,1] for the home team. */

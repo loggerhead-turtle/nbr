@@ -70,3 +70,64 @@ describe("computeRatingsBT", () => {
     expect(carried.teams.get("A")!.rating).toBeGreaterThan(plain.teams.get("A")!.rating + 200);
   });
 });
+
+describe("computeRatingsBT — age-baseline curve (bt-age-v1)", () => {
+  // Two age groups with a few bridge games connecting them.
+  const ages = new Map<string, string>([
+    ["S1", "U16"], ["S2", "U16"], ["J1", "U10"], ["J2", "U10"],
+  ]);
+  const baseGames: EngineGame[] = [
+    // within U16
+    game("S1", "S2", 6, 3, 0), game("S1", "S2", 5, 2, 7),
+    // within U10
+    game("J1", "J2", 6, 3, 1), game("J1", "J2", 7, 2, 8),
+  ];
+
+  it("places an older age group above a younger one when bridges say so", () => {
+    const games = [
+      ...baseGames,
+      game("S1", "J1", 10, 1, 2), game("S1", "J1", 9, 0, 9), game("S2", "J2", 8, 1, 3),
+    ];
+    const out = computeRatingsBT(games, { lambda: 0.3, ageGroup: ages });
+    const curve = new Map(out.ageCurve!.map((c) => [c.ageGroup, c.baseline]));
+    expect(curve.get("U16")!).toBeGreaterThan(curve.get("U10")!);
+    // A bridge count is reported per age (used by the UI to caveat thin ages).
+    expect(out.ageCurve!.find((c) => c.ageGroup === "U16")!.bridgeGames).toBe(3);
+    // An average older team outranks an average younger team across the gap.
+    expect(out.teams.get("S2")!.rating).toBeGreaterThan(out.teams.get("J1")!.rating);
+  });
+
+  it("never inverts the curve even if a younger team plays up and wins", () => {
+    // J1 (U10) thrashes S1 (U16) in the bridges — selection bias incarnate.
+    const games = [
+      ...baseGames,
+      game("J1", "S1", 12, 0, 2), game("J1", "S1", 11, 0, 9), game("J1", "S2", 10, 1, 3),
+    ];
+    const out = computeRatingsBT(games, { lambda: 0.3, ageGroup: ages, enforceMonotone: true });
+    const curve = new Map(out.ageCurve!.map((c) => [c.ageGroup, c.baseline]));
+    expect(curve.get("U16")!).toBeGreaterThanOrEqual(curve.get("U10")! - 1e-6);
+  });
+
+  it("preserves within-age ordering and leaves the plain model untouched", () => {
+    const u12 = new Map<string, string>([["A", "U12"], ["B", "U12"], ["C", "U12"]]);
+    const games: EngineGame[] = [
+      game("A", "B", 5, 2, 0), game("B", "C", 6, 3, 1), game("A", "C", 7, 1, 2),
+    ];
+    const plain = computeRatingsBT(games, { lambda: 0.3 });
+    const aged = computeRatingsBT(games, { lambda: 0.3, ageGroup: u12 });
+    expect(plain.ageCurve).toBeUndefined();
+    const order = (o: ReturnType<typeof computeRatingsBT>) =>
+      ["A", "B", "C"].sort((x, y) => o.teams.get(y)!.rating - o.teams.get(x)!.rating);
+    expect(order(aged)).toEqual(order(plain));
+  });
+
+  it("widens RD for an age that has no bridge games (rests on the prior)", () => {
+    // Two disconnected age islands, no bridges at all.
+    const games = [...baseGames];
+    const out = computeRatingsBT(games, { lambda: 0.3, ageGroup: ages });
+    for (const c of out.ageCurve!) expect(c.bridgeGames).toBe(0);
+    // The curve still orders U16 ≥ U10 purely from the developmental prior.
+    const curve = new Map(out.ageCurve!.map((c) => [c.ageGroup, c.baseline]));
+    expect(curve.get("U16")!).toBeGreaterThan(curve.get("U10")!);
+  });
+});
