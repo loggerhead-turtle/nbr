@@ -162,6 +162,151 @@ export async function findAutoMergeTarget(target: {
   return score.tier === "high" ? { id: ghost.id, name: ghost.name, score } : null;
 }
 
+export interface GhostMergeSuggestion {
+  targetId: string;
+  targetName: string;
+  targetCity: string | null;
+  targetState: string | null;
+  targetGcTeamId: string | null;
+  score: MergeScore;
+}
+
+export interface GhostTeamWithSuggestions {
+  id: string;
+  name: string;
+  ageGroup: string | null;
+  city: string | null;
+  state: string | null;
+  totalGames: number;
+  /** Ranked real-team merge targets (best first); empty when nothing matches. */
+  suggestions: GhostMergeSuggestion[];
+}
+
+/**
+ * List ghost teams (auto-created opponents) with ranked, confidence-scored merge
+ * targets for the admin Ghost-teams page. For each ghost we cheaply pre-score
+ * same-name real teams, then run the full model (incl. shared games + game-region
+ * overlap) on the top few — so admins see exactly why each suggestion is strong
+ * or weak before merging.
+ */
+export async function getGhostTeamsWithSuggestions(limit = 100): Promise<GhostTeamWithSuggestions[]> {
+  const ghosts = await prisma.team.findMany({
+    where: { isGhost: true },
+    select: {
+      id: true,
+      name: true,
+      ageGroup: true,
+      city: true,
+      state: true,
+      coaches: true,
+      _count: { select: { homeGames: true, awayGames: true } },
+    },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+  });
+
+  const results: GhostTeamWithSuggestions[] = [];
+  for (const g of ghosts) {
+    const norm = normalizeTeamName(g.name);
+    const firstToken = norm.split(" ")[0] ?? norm;
+
+    const candidates = norm
+      ? await prisma.team.findMany({
+          where: {
+            id: { not: g.id },
+            isGhost: false,
+            name: { contains: firstToken, mode: "insensitive" },
+          },
+          select: {
+            id: true,
+            name: true,
+            ageGroup: true,
+            city: true,
+            state: true,
+            coaches: true,
+            gcTeamId: true,
+          },
+          take: 25,
+        })
+      : [];
+
+    // Cheap first pass (no game queries) to pick the few worth refining.
+    const prelim = candidates
+      .map((c) => ({
+        c,
+        cheap: scoreMerge({
+          nameA: g.name,
+          nameB: c.name,
+          ageA: g.ageGroup,
+          ageB: c.ageGroup ?? ageGroupFromName(c.name),
+          cityA: g.city,
+          cityB: c.city,
+          stateA: g.city ? g.state : null,
+          stateB: c.state,
+          coachesA: g.coaches,
+          coachesB: c.coaches,
+        }),
+      }))
+      .filter((x) => !x.cheap.disqualified && x.cheap.tier !== "none")
+      .sort((a, b) => b.cheap.score - a.cheap.score)
+      .slice(0, 3);
+
+    const suggestions: GhostMergeSuggestion[] = [];
+    for (const { c } of prelim) {
+      const [shared, ghostRegion, targetRegion] = await Promise.all([
+        sharedMatchupCount(g.id, c.id),
+        teamRegionStates(g.id, c.id),
+        teamRegionStates(c.id, g.id),
+      ]);
+      const score = scoreMerge({
+        nameA: g.name,
+        nameB: c.name,
+        ageA: g.ageGroup,
+        ageB: c.ageGroup ?? ageGroupFromName(c.name),
+        cityA: g.city,
+        cityB: c.city,
+        stateA: g.city ? g.state : null,
+        stateB: c.state,
+        coachesA: g.coaches,
+        coachesB: c.coaches,
+        sharedGameCount: shared,
+        regionStatesA: ghostRegion,
+        regionStatesB: targetRegion,
+      });
+      suggestions.push({
+        targetId: c.id,
+        targetName: c.name,
+        targetCity: c.city,
+        targetState: c.state,
+        targetGcTeamId: c.gcTeamId,
+        score,
+      });
+    }
+    suggestions.sort((a, b) => b.score.score - a.score.score);
+
+    results.push({
+      id: g.id,
+      name: g.name,
+      ageGroup: g.ageGroup,
+      city: g.city,
+      state: g.state,
+      totalGames: g._count.homeGames + g._count.awayGames,
+      suggestions,
+    });
+  }
+
+  // Ghosts with a confident match float to the top; orphans sink.
+  results.sort(
+    (a, b) => (b.suggestions[0]?.score.score ?? -1) - (a.suggestions[0]?.score.score ?? -1),
+  );
+  return results;
+}
+
+/** Count ghost teams (for the admin nav badge). */
+export async function countGhostTeams(): Promise<number> {
+  return prisma.team.count({ where: { isGhost: true } });
+}
+
 /**
  * Merge `sourceId` into `targetId`: reassign games, transfer a GameChanger ID and
  * any missing fields, drop self-games and duplicate matchups, delete the source.

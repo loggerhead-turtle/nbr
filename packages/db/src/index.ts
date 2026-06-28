@@ -25,5 +25,13 @@ export {
   dedupeTeamGames,
   findCrossAgeMergeArtifacts,
   repairCrossAgeMerge,
+  getGhostTeamsWithSuggestions,
+  countGhostTeams,
 } from "./teams";
-export type { BadMergeFinding, BadMergeOutlier, AutoMergeTarget } from "./teams";
+export type {
+  BadMergeFinding,
+  BadMergeOutlier,
+  AutoMergeTarget,
+  GhostTeamWithSuggestions,
+  GhostMergeSuggestion,
+} from "./teams";
