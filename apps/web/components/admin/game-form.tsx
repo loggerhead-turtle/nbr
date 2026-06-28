@@ -73,7 +73,7 @@ export function GameForm({ teams }: { teams: TeamOption[] }) {
       </div>
 
       <label className="flex items-center gap-2 text-sm text-slate-600">
-        <input type="checkbox" name="neutralSite" /> Neutral site (tournament) — skip home-field
+        <input type="checkbox" name="neutralSite" className="h-4 w-4 shrink-0" /> Neutral site (tournament) — skip home-field
         adjustment
       </label>
 
@@ -85,7 +85,7 @@ export function GameForm({ teams }: { teams: TeamOption[] }) {
       </div>
 
       <label className="flex items-center gap-2 text-sm text-slate-600">
-        <input type="checkbox" name="confirmDuplicate" value="1" /> Allow duplicate (doubleheader)
+        <input type="checkbox" name="confirmDuplicate" value="1" className="h-4 w-4 shrink-0" /> Allow duplicate (doubleheader)
       </label>
 
       {state.error && <p className="text-sm font-medium text-rose-600">{state.error}</p>}

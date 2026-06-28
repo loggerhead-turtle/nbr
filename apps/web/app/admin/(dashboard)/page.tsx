@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@nbr/db";
 import { formatDate } from "@/lib/format";
-import { setTdStatusAction } from "@/lib/admin-actions";
+import { setTdStatusAction, setLiveSearchAction } from "@/lib/admin-actions";
 import { advanceSeasonAction } from "@/lib/season-actions";
 import { getCurrentSeasonYear } from "@/lib/season";
+import { getLiveSearchEnabled } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,7 @@ export default async function AdminDashboard() {
   });
 
   const currentSeasonYear = await getCurrentSeasonYear();
+  const liveSearch = await getLiveSearchEnabled();
 
   const tdRequests = await prisma.user.findMany({
     where: { tdStatus: "REQUESTED" },
@@ -85,6 +87,22 @@ export default async function AdminDashboard() {
             />
           </div>
           <button className="btn-primary">Advance season</button>
+        </form>
+      </div>
+
+      <div className="card mt-6 p-5">
+        <h2 className="font-bold text-navy-900">Site settings</h2>
+        <form action={setLiveSearchAction} className="mt-3 flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              name="liveSearch"
+              defaultChecked={liveSearch}
+              className="h-4 w-4 shrink-0"
+            />
+            Live ratings search (update the list as filters change, no “Apply” button)
+          </label>
+          <button className="btn-ghost">Save</button>
         </form>
       </div>
 

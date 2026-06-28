@@ -20,7 +20,7 @@ export function ClaimForm({ teamId, teamName }: { teamId: string; teamName: stri
       </div>
 
       <label className="flex items-start gap-2 text-sm text-slate-700">
-        <input type="checkbox" name="confirm" className="mt-1" />
+        <input type="checkbox" name="confirm" className="mt-1 h-4 w-4 shrink-0" />
         <span>
           I confirm I am the coach or an authorized representative of <strong>{teamName}</strong>.
         </span>
@@ -37,7 +37,7 @@ export function ClaimForm({ teamId, teamName }: { teamId: string; teamName: stri
       </div>
 
       <label className="flex items-start gap-2 text-sm text-slate-700">
-        <input type="checkbox" name="contactOptIn" className="mt-1" />
+        <input type="checkbox" name="contactOptIn" className="mt-1 h-4 w-4 shrink-0" />
         <span>
           Allow other <strong>registered users</strong> to see my email and phone for scrimmage
           requests. (Off by default — your contact info stays private.)
