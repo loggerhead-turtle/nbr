@@ -18,4 +18,11 @@ if (process.env.NODE_ENV !== "production") {
 
 export * from "@prisma/client";
 export { Prisma } from "@prisma/client";
-export { findPromotableTeam, mergeTeams, dedupeTeamGames } from "./teams";
+export {
+  findPromotableTeam,
+  mergeTeams,
+  dedupeTeamGames,
+  findCrossAgeMergeArtifacts,
+  repairCrossAgeMerge,
+} from "./teams";
+export type { BadMergeFinding, BadMergeOutlier } from "./teams";
