@@ -9,6 +9,7 @@ export interface RatingRow {
   ageGroup: string | null;
   classification: string | null;
   isGhost: boolean;
+  hasApprovedClaim: boolean;
   rating: number;
   rd: number;
   gamesPlayed: number;
@@ -69,7 +70,7 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
       prisma.team.findMany({
         where,
         orderBy,
-        include: { rating: true },
+        include: { rating: true, claim: { select: { status: true } } },
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -87,6 +88,7 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
         ageGroup: t.ageGroup,
         classification: t.classification,
         isGhost: t.isGhost,
+        hasApprovedClaim: t.claim?.status === "APPROVED",
         rating: t.rating!.rating,
         rd: t.rating!.rd,
         gamesPlayed: t.rating!.gamesPlayed,

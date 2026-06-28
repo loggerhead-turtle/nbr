@@ -47,6 +47,8 @@ export default async function ManageTournamentPage({ params }: { params: Promise
     const avg = rosterRatings.reduce((a, b) => a + b, 0) / rosterRatings.length;
     const where: Prisma.TeamWhereInput = {
       id: { notIn: Object.keys(excluded) },
+      // Only suggest real teams — never scraped ghost opponents.
+      isGhost: false,
       rating: { is: { rating: { gte: lo, lte: hi }, isProvisional: false } },
       OR: [{ ageGroup: { not: null } }, { classification: { not: null } }],
     };
