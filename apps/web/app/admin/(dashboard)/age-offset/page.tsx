@@ -1,25 +1,28 @@
 import Link from "next/link";
 import { prisma } from "@nbr/db";
-import { ageOffsetPoints, DEFAULT_AGE_STEP } from "@/lib/age-offset";
+import { ageOffsetPoints, AGE_OFFSET_KEY, clampAgeStep, DEFAULT_AGE_STEP } from "@/lib/age-offset";
+import { setAgeOffsetStepAction } from "@/lib/admin-actions";
 import { formatRating, ageGroupLabel } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Age offset (experimental)", robots: { index: false } };
 
 /**
- * Admin-only visualization of a cross-age combined ranking. Each age group's
- * rating is shifted by `step` points per age year (14U = 0) so older teams sort
- * above younger ones. Display-only — nothing here changes stored ratings or the
- * public site. Tune `step` until the ordering looks right.
+ * Admin-only control + visualization of the cross-age rating offset. Each age
+ * group's rating is shifted by the saved step (points per age year, 14U = 0) so
+ * older teams sort above younger ones. The step is persisted in AppSetting and
+ * editable here; saving re-renders the combined ranking so you can watch the
+ * effect. Display-only — it does not change stored ratings or the public site.
  */
 export default async function AgeOffsetPage({
   searchParams,
 }: {
-  searchParams: Promise<{ step?: string; prov?: string }>;
+  searchParams: Promise<{ prov?: string }>;
 }) {
   const sp = await searchParams;
-  const step = clampStep(sp.step);
   const includeProvisional = sp.prov === "1";
+  const saved = await prisma.appSetting.findUnique({ where: { key: AGE_OFFSET_KEY } });
+  const step = saved ? clampAgeStep(saved.value) : DEFAULT_AGE_STEP;
 
   const teams = await prisma.team.findMany({
     where: {
@@ -54,22 +57,34 @@ export default async function AgeOffsetPage({
       <h1 className="text-2xl font-black text-navy-900">Cross-age ranking (experimental)</h1>
       <p className="mt-2 max-w-2xl text-sm text-slate-600">
         Combined ranking across age groups, shifting each age group by{" "}
-        <strong>{step}</strong> points per age year (14U = 0). This is a backstage view to validate
-        the offset before exposing it — it does <strong>not</strong> change stored ratings or the
-        public ratings page.
+        <strong>{step}</strong> points per age year (14U = 0). The value is saved and used as the
+        canonical offset; this is a backstage view to validate it before exposing — it does{" "}
+        <strong>not</strong> change stored ratings or the public ratings page.
       </p>
 
-      <form method="get" className="mt-4 flex flex-wrap items-end gap-3">
-        <div>
-          <label className="label" htmlFor="step">Points per age year</label>
-          <input id="step" name="step" defaultValue={String(step)} className="input w-32" inputMode="numeric" />
-        </div>
-        <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
-          <input type="checkbox" name="prov" value="1" defaultChecked={includeProvisional} />
-          Include provisional
-        </label>
-        <button className="btn-primary">Apply</button>
-      </form>
+      <div className="mt-4 flex flex-wrap items-end gap-6">
+        <form action={setAgeOffsetStepAction} className="flex items-end gap-3">
+          <div>
+            <label className="label" htmlFor="step">Points per age year</label>
+            <input
+              id="step"
+              name="step"
+              defaultValue={String(step)}
+              className="input w-32"
+              inputMode="numeric"
+            />
+          </div>
+          <button className="btn-primary">Save &amp; apply</button>
+        </form>
+
+        <form method="get" className="flex items-center gap-2 pb-2 text-sm text-slate-600">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" name="prov" value="1" defaultChecked={includeProvisional} />
+            Include provisional
+          </label>
+          <button className="btn-ghost">Apply</button>
+        </form>
+      </div>
 
       <p className="mt-4 text-sm text-slate-500">{rows.length} teams</p>
 
@@ -112,10 +127,4 @@ export default async function AgeOffsetPage({
       </div>
     </div>
   );
-}
-
-function clampStep(raw: string | undefined): number {
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return DEFAULT_AGE_STEP;
-  return Math.max(0, Math.min(1000, Math.round(n)));
 }

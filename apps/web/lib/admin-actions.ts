@@ -13,6 +13,7 @@ import {
   CLASSIFICATIONS,
   geocodeCity,
 } from "@nbr/core";
+import { AGE_OFFSET_KEY, clampAgeStep } from "./age-offset";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew } from "./render-jobs";
 import { sendEmail, emailLayout, siteUrl } from "./email";
@@ -390,6 +391,18 @@ export async function clearTeamLocationAction(formData: FormData): Promise<void>
   });
   revalidatePath("/admin/teams");
   revalidatePath("/");
+}
+
+/** Save the admin-tunable cross-age rating offset (points per age year). */
+export async function setAgeOffsetStepAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const step = clampAgeStep(formData.get("step"));
+  await prisma.appSetting.upsert({
+    where: { key: AGE_OFFSET_KEY },
+    create: { key: AGE_OFFSET_KEY, value: String(step) },
+    update: { value: String(step) },
+  });
+  revalidatePath("/admin/age-offset");
 }
 
 export async function mergeTeamAction(formData: FormData): Promise<void> {
