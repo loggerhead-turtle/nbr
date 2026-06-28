@@ -10,7 +10,16 @@
  * to visualize a combined cross-age ranking on the admin side.
  */
 export const DEFAULT_AGE_STEP = 200;
+/** AppSetting key for the admin-tunable points-per-age-year offset. */
+export const AGE_OFFSET_KEY = "ageOffsetStep";
 const ANCHOR_AGE = 14;
+
+/** Clamp a raw step value to a sane range. */
+export function clampAgeStep(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_AGE_STEP;
+  return Math.max(0, Math.min(1000, Math.round(n)));
+}
 
 /** Parse an age group like "14U" (or "U14") to its number; null if not an age group. */
 export function ageYears(ageGroup: string | null | undefined): number | null {
