@@ -36,6 +36,8 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
   const where: Prisma.TeamWhereInput = {
     isActive: true,
     rating: { isNot: null },
+    // Public side requires a classified age group; unclassified teams are admin-only.
+    ageGroup: { not: null },
   };
   if (q.search) {
     where.name = { contains: q.search, mode: "insensitive" };
@@ -116,7 +118,7 @@ export async function getTeamBySlug(slug: string) {
 
 export async function getAllTeamSlugs(): Promise<{ slug: string; updatedAt: Date }[]> {
   return prisma.team.findMany({
-    where: { isActive: true },
+    where: { isActive: true, ageGroup: { not: null } },
     select: { slug: true, updatedAt: true },
   });
 }

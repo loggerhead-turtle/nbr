@@ -4,7 +4,7 @@
  * the caller — failures are captured in the returned status.
  */
 import { prisma, ScrapeStatus, AgeGroup, findPromotableTeam, mergeTeams } from "@nbr/db";
-import { normalizeTeamName, teamSlug } from "@nbr/core";
+import { normalizeTeamName, teamSlug, ageGroupFromName } from "@nbr/core";
 import type { BrowserContext } from "playwright";
 import { openSchedule, pageDiagnostics } from "./browser.js";
 import { parseScheduleText, parseTeamHeader, type ParsedGame } from "./parseSchedule.js";
@@ -236,10 +236,14 @@ async function resolveOpponent(rawName: string): Promise<string> {
   while (await prisma.team.findUnique({ where: { slug } })) {
     slug = `${teamSlug(rawName)}-${n++}`;
   }
+  // Age comes only from the opponent's OWN stated name (e.g. "Cannons 14U"),
+  // never inferred — left null (unclassified) when the name states no age.
+  const ageGroup = ageGroupFromName(rawName) as AgeGroup | null;
   const ghost = await prisma.team.create({
     data: {
       name: rawName.slice(0, 120),
       slug,
+      ageGroup: ageGroup ?? undefined,
       isGhost: true,
       scrapeEnabled: false, // we don't have a GC id for ghosts
       rating: { create: {} },

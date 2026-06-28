@@ -35,7 +35,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function TeamPage({ params }: Params) {
   const { slug } = await params;
   const team = await getTeamBySlug(slug);
-  if (!team) notFound();
+  // Unclassified teams (no age group) are admin-only and not published publicly.
+  if (!team || !team.ageGroup) notFound();
 
   const games = [
     ...team.homeGames.map((g) => ({

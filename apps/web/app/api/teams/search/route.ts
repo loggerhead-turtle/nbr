@@ -10,8 +10,9 @@ export async function GET(req: NextRequest) {
   const teams = await prisma.team.findMany({
     where: {
       isActive: true,
+      // Public tool: only classified teams.
+      ageGroup: age ? (age as never) : { not: null },
       name: { contains: q, mode: "insensitive" },
-      ...(age ? { ageGroup: age as never } : {}),
     },
     include: { rating: true },
     take: 12,

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { updateTeamAction, deleteTeamAction, type ActionState } from "@/lib/admin-actions";
+import { AGE_GROUPS } from "@nbr/core";
 
 const initial: ActionState = {};
 
@@ -9,6 +10,7 @@ export interface TeamRowData {
   id: string;
   name: string;
   gcTeamId: string | null;
+  ageGroup: string | null;
   scrapeEnabled: boolean;
   isGhost: boolean;
   games: number;
@@ -34,6 +36,21 @@ export function TeamRow({ team }: { team: TeamRowData }) {
             placeholder="(none)"
             className="input font-mono text-xs"
           />
+        </div>
+        <div>
+          <label className="label">Age</label>
+          <select
+            name="ageGroup"
+            defaultValue={team.ageGroup ?? ""}
+            className={`input ${team.ageGroup ? "" : "border-amber-400 bg-amber-50"}`}
+          >
+            <option value="">Unclassified</option>
+            {AGE_GROUPS.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
         </div>
         <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
           <input type="checkbox" name="scrapeEnabled" defaultChecked={team.scrapeEnabled} /> Scrape

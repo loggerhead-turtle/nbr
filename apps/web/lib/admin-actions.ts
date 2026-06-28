@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma, GameSource, GameStatus } from "@nbr/db";
-import { createTeamSchema, createGameSchema, teamSlug, gcTeamIdSchema } from "@nbr/core";
+import { createTeamSchema, createGameSchema, teamSlug, gcTeamIdSchema, AGE_GROUPS } from "@nbr/core";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import {
   ADMIN_COOKIE,
@@ -55,9 +55,39 @@ export async function createTeamAction(
 ): Promise<ActionState> {
   await requireAdmin();
 
+  const nameInput = String(formData.get("name") ?? "").trim();
+  const gcInput = String(formData.get("gcTeamId") ?? "").trim();
+
+  // Name is optional on the admin side. With no name but a GameChanger ID, create
+  // a stub the scraper will enrich (name/city/age filled in on first scrape).
+  if (!nameInput) {
+    if (!gcInput) return { error: "Enter a team name or a GameChanger ID." };
+    const parsedId = gcTeamIdSchema.safeParse(gcInput);
+    if (!parsedId.success) {
+      return { error: parsedId.error.errors[0]?.message ?? "Invalid GameChanger ID." };
+    }
+    const gcTeamId = parsedId.data;
+    const dup = await prisma.team.findUnique({ where: { gcTeamId } });
+    if (dup) return { error: `That GameChanger ID is already linked to “${dup.name}”.` };
+    const slug = await uniqueSlug(`gc-${gcTeamId.toLowerCase()}`);
+    await prisma.team.create({
+      data: {
+        name: `Unnamed team (${gcTeamId})`,
+        gcTeamId,
+        slug,
+        state: "UT",
+        needsEnrichment: true,
+        scrapeEnabled: true,
+        rating: { create: {} },
+      },
+    });
+    revalidatePath("/admin/teams");
+    return { ok: true, message: "Added. Name and details fill in on the next scrape." };
+  }
+
   const raw = {
-    name: formData.get("name"),
-    gcTeamId: formData.get("gcTeamId") || "",
+    name: nameInput,
+    gcTeamId: gcInput,
     ageGroup: formData.get("ageGroup") || undefined,
     division: formData.get("division") || undefined,
     city: formData.get("city") || undefined,
@@ -274,6 +304,9 @@ export async function updateTeamAction(
 
   const scrapeEnabled = formData.get("scrapeEnabled") === "on";
 
+  const rawAge = String(formData.get("ageGroup") ?? "").trim();
+  const ageGroup = rawAge && (AGE_GROUPS as readonly string[]).includes(rawAge) ? rawAge : null;
+
   try {
     await prisma.team.update({
       where: { id },
@@ -281,6 +314,7 @@ export async function updateTeamAction(
         name,
         gcTeamId,
         scrapeEnabled,
+        ageGroup: ageGroup as never,
         // Reset scrape bookkeeping so a corrected ID gets re-scraped promptly.
         lastScrapedAt: null,
         nextScrapeAfter: null,

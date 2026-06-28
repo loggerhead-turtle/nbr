@@ -12,9 +12,12 @@ export function TeamForm() {
     <form action={action} className="card max-w-xl space-y-4 p-6" key={state.ok ? Math.random() : "f"}>
       <div>
         <label className="label" htmlFor="name">
-          Team name *
+          Team name
         </label>
-        <input id="name" name="name" required className="input" placeholder="SLC Thunder" />
+        <input id="name" name="name" className="input" placeholder="SLC Thunder" />
+        <p className="mt-1 text-xs text-slate-500">
+          Optional — leave blank with a GameChanger ID and the scraper fills it in.
+        </p>
       </div>
 
       <div>

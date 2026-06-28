@@ -5,12 +5,13 @@ import { formatDate } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
-  const [teamCount, ghostCount, gameCount, scrapeCount, lastRun, recentScrapes] =
+  const [teamCount, ghostCount, gameCount, scrapeCount, unclassifiedCount, lastRun, recentScrapes] =
     await Promise.all([
       prisma.team.count({ where: { isGhost: false } }),
       prisma.team.count({ where: { isGhost: true } }),
       prisma.game.count({ where: { status: "FINAL" } }),
       prisma.game.count({ where: { source: "SCRAPE" } }),
+      prisma.team.count({ where: { ageGroup: null } }),
       prisma.ratingRun.findFirst({ orderBy: { startedAt: "desc" } }),
       prisma.scrapeJob.findMany({ orderBy: { startedAt: "desc" }, take: 8, include: { team: true } }),
     ]);
@@ -18,6 +19,19 @@ export default async function AdminDashboard() {
   return (
     <div>
       <h1 className="text-2xl font-black text-navy-900">Admin dashboard</h1>
+
+      {unclassifiedCount > 0 && (
+        <Link
+          href="/admin/teams?filter=unclassified"
+          className="mt-4 flex items-center justify-between rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100"
+        >
+          <span>
+            ⚠️ <strong>{unclassifiedCount}</strong> team{unclassifiedCount === 1 ? "" : "s"} need an
+            age group before they show publicly.
+          </span>
+          <span className="font-medium underline">Classify now →</span>
+        </Link>
+      )}
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard label="Teams" value={teamCount} />
