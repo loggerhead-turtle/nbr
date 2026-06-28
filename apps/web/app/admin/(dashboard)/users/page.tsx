@@ -1,5 +1,5 @@
 import { prisma, Prisma } from "@nbr/db";
-import { setTdStatusAction } from "@/lib/admin-actions";
+import { setTdStatusAction, setUserRoleAction } from "@/lib/admin-actions";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +50,7 @@ export default async function AdminUsersPage({
           <thead className="bg-navy-900 text-xs uppercase text-navy-100">
             <tr>
               <th className="px-4 py-3">User</th>
+              <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Teams</th>
               <th className="px-4 py-3">Tournaments</th>
               <th className="px-4 py-3">TD status</th>
@@ -66,6 +67,11 @@ export default async function AdminUsersPage({
                   <div className="text-xs text-slate-500">{u.email}</div>
                   {u.tdOrg && <div className="text-xs text-slate-400">{u.tdOrg}</div>}
                 </td>
+                <td className="px-4 py-3">
+                  <span className={`badge ${u.role === "ADMIN" ? "bg-navy-900 text-white" : "bg-slate-100 text-slate-600"}`}>
+                    {u.role}
+                  </span>
+                </td>
                 <td className="px-4 py-3 tabular-nums text-slate-600">{u._count.claims}</td>
                 <td className="px-4 py-3 tabular-nums text-slate-600">{u._count.tournaments}</td>
                 <td className="px-4 py-3">
@@ -76,6 +82,19 @@ export default async function AdminUsersPage({
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-2">
+                    {u.role !== "ADMIN" ? (
+                      <form action={setUserRoleAction}>
+                        <input type="hidden" name="userId" value={u.id} />
+                        <input type="hidden" name="role" value="ADMIN" />
+                        <button className="btn-ghost text-navy-800">Make admin</button>
+                      </form>
+                    ) : (
+                      <form action={setUserRoleAction}>
+                        <input type="hidden" name="userId" value={u.id} />
+                        <input type="hidden" name="role" value="USER" />
+                        <button className="btn-ghost text-slate-500">Remove admin</button>
+                      </form>
+                    )}
                     {u.tdStatus !== "APPROVED" ? (
                       <form action={setTdStatusAction}>
                         <input type="hidden" name="userId" value={u.id} />

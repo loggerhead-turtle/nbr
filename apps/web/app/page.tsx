@@ -124,6 +124,9 @@ function Hero() {
           <Link href="/pools" className="btn-accent">
             Generate Tournament Pools
           </Link>
+          <Link href="/submit-team" className="btn-ghost bg-white text-navy-900 hover:bg-navy-50">
+            + Add your team
+          </Link>
           <Link href="/about" className="btn-ghost bg-white/10 text-white hover:bg-white/20">
             How ratings work
           </Link>

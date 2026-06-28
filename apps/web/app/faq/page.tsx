@@ -21,7 +21,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: "Why did my team’s rating change when it didn’t play?",
-    a: "Two reasons: long layoffs increase uncertainty (rating deviation), and your opponents’ ratings can shift as they play, which changes the strength of your past results.",
+    a: "Ratings are recomputed from the whole web of results each cycle. When your opponents (and their opponents) play, their ratings shift — which changes the strength of the teams you beat or lost to, and therefore your rating. Recent games are also weighted more heavily over time.",
   },
   {
     q: "How does the pool generator keep pools fair?",

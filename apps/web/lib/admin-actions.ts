@@ -358,6 +358,15 @@ export async function mergeTeamAction(formData: FormData): Promise<void> {
   revalidatePath("/");
 }
 
+export async function setUserRoleAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const role = String(formData.get("role") ?? "");
+  if (!userId || !["ADMIN", "USER"].includes(role)) return;
+  await prisma.user.update({ where: { id: userId }, data: { role: role as "ADMIN" | "USER" } });
+  revalidatePath("/admin/users");
+}
+
 export async function setTdStatusAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const userId = String(formData.get("userId") ?? "");

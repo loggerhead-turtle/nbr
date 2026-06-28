@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "How the Ratings Work",
   description:
-    "How National Baseball Ratings are calculated: a Glicko-2 statistical model that rates teams by who they played and how they did.",
+    "How National Baseball Ratings are calculated: a global statistical model that rates every team from the full web of game results.",
   alternates: { canonical: "/about" },
 };
 
@@ -13,50 +13,53 @@ export default function AboutPage() {
       <h1 className="text-3xl font-black text-navy-900">How the ratings work</h1>
       <p className="mt-4 text-slate-600">
         The National Baseball Ratings (NBR) measure team strength from game results — not
-        reputation, region, or record alone. Beating a strong team helps your rating far more
-        than beating a weak one, and every result is weighed by how certain we are about both
-        teams.
+        reputation, region, or record alone. Beating a strong team helps far more than beating a
+        weak one, and the rating reflects <em>who</em> you played, not just whether you won.
       </p>
 
-      <Section title="The model: Glicko-2">
-        We use <strong>Glicko-2</strong>, a modern, peer-reviewed rating system (an evolution of
-        Elo). Each team has three numbers:
-        <ul className="ml-5 mt-3 list-disc space-y-1">
-          <li>
-            <strong>Rating</strong> — overall strength. New teams start at 1500.
-          </li>
-          <li>
-            <strong>Rating deviation (RD)</strong> — how confident we are. It shrinks as a team
-            plays and grows during long layoffs.
-          </li>
-          <li>
-            <strong>Volatility</strong> — how erratic a team’s results have been.
-          </li>
-        </ul>
+      <Section title="One global model, not head-to-head">
+        Most teams never play each other directly. NBR doesn’t need them to. We solve the{" "}
+        <strong>entire web of games at once</strong> — a global statistical model
+        (Bradley-Terry, the foundation of modern rating systems) finds the single set of ratings
+        that best explains every result across the whole state. Strength flows through{" "}
+        <strong>chains of common opponents</strong>: if your opponents beat the teams that beat
+        other teams, that all feeds your rating. Tournaments are the bridges that connect
+        everyone into one comparable pool.
       </Section>
 
-      <Section title="Provisional ratings">
-        Teams with very few games, or long periods of inactivity, are marked{" "}
-        <em>Provisional</em>. Their ratings are shown but treated cautiously and kept out of the
-        default ranking until we have enough data to be confident.
+      <Section title="Margin of victory (capped)">
+        A blowout says more than a one-run nail-biter, so bigger wins move the needle more — but
+        with <strong>diminishing returns</strong>. Winning 12–2 counts well above winning 6–5;
+        winning 25–0 counts barely more than 12–2. Running up the score doesn’t pad your rating.
+      </Section>
+
+      <Section title="Recent games matter most">
+        Ratings are recalculated regularly and <strong>weight recent games more heavily</strong>,
+        so they move week to week as the season unfolds. A team that’s rolling climbs; a team
+        that’s slipping falls. No one stays on top on reputation — you have to keep winning.
+      </Section>
+
+      <Section title="Confidence & provisional ratings">
+        Teams with only a handful of games are shown as <em>Provisional</em> and treated
+        cautiously (and kept out of the default ranking) until there’s enough data to be
+        confident. Every team also carries a confidence level based on how much it has played.
+      </Section>
+
+      <Section title="Carrying over between seasons">
+        Most clubs register a new team each year (e.g. 13U → 14U). When a team links its new
+        season to its old one, its rating <strong>carries forward</strong> as a starting point
+        rather than resetting — then quickly adjusts as the new season’s games come in.
       </Section>
 
       <Section title="Strength of schedule & connectivity">
-        A rating only means something relative to the teams you’ve played and the teams they’ve
-        played. When two groups of teams never face each other, their ratings aren’t directly
-        comparable yet — tournament games are the bridges that connect everyone. Early in a
-        season, expect ratings to move as the web of results fills in.
-      </Section>
-
-      <Section title="Home field & margin">
-        We apply a small home-field adjustment for non-neutral games and none for neutral-site
-        tournament games. The core model rewards winning and losing; blowouts are not rewarded
-        disproportionately.
+        A rating is only meaningful relative to a connected web of opponents. Early in a season,
+        before tournaments link everyone together, separate groups of teams aren’t directly
+        comparable — expect ratings to settle as the season’s results fill in.
       </Section>
 
       <Section title="Where the data comes from">
         Scores are compiled from publicly available game results and from games entered by our
-        team. Ratings are recalculated on a weekly to semi-weekly basis.
+        team. Ratings are refreshed on a weekly to semi-weekly basis.
       </Section>
 
       <p className="mt-8 rounded-lg bg-slate-100 p-4 text-sm text-slate-500">

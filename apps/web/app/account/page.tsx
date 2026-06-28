@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@nbr/db";
-import { getCurrentUser } from "@/lib/user-auth";
+import { getCurrentUser, isCurrentUserAdmin } from "@/lib/user-auth";
 import { logoutUserAction } from "@/lib/account-actions";
 import { respondScrimmageRequestAction } from "@/lib/scrimmage-actions";
 import { respondTournamentInviteAction } from "@/lib/tournament-actions";
@@ -31,6 +31,7 @@ export default async function AccountPage() {
     }),
     getCurrentSeasonYear(),
   ]);
+  const userIsAdmin = await isCurrentUserAdmin();
   const myTeamIds = claims.map((c) => c.team.id);
   const myTeamName = new Map(claims.map((c) => [c.team.id, c.team.name] as const));
 
@@ -88,6 +89,11 @@ export default async function AccountPage() {
       <p className="mt-1 text-sm text-slate-500">
         {user.firstName} {user.lastName} · {user.email}
       </p>
+      {userIsAdmin && (
+        <Link href="/admin" className="btn-ghost mt-3 inline-flex">
+          Admin dashboard →
+        </Link>
+      )}
 
       {/* Season rollover — the first thing a coach sees when a new season opens */}
       {rolloverTeams.length > 0 && currentSeasonYear != null && (

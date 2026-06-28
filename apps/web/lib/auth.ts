@@ -1,10 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { isCurrentUserAdmin } from "./user-auth";
 
 /**
- * Minimal MVP admin auth: a single shared password gates /admin. On success we
- * set a signed, time-limited cookie. This is intentionally lightweight — Phase 2
- * replaces it with NextAuth + per-user ADMIN roles.
+ * Admin auth. Primary path: a signed-in user with an ADMIN role (bootstrapped
+ * from ADMIN_ALLOWLIST). Fallback: a shared-password cookie (emergency backdoor)
+ * so the owner can never be locked out.
  */
 
 export const ADMIN_COOKIE = "nbr_admin";
@@ -46,8 +47,9 @@ export function checkPassword(input: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Server-side guard for use in admin server components / route handlers. */
+/** Server-side guard: a real admin account, OR the shared-password fallback. */
 export async function isAdmin(): Promise<boolean> {
+  if (await isCurrentUserAdmin()) return true;
   const store = await cookies();
   return verifySessionToken(store.get(ADMIN_COOKIE)?.value);
 }

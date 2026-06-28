@@ -59,6 +59,14 @@ export interface SessionUser {
   lastName: string | null;
   email: string;
   phone: string | null;
+  role: string;
+}
+
+function adminAllowlist(): string[] {
+  return (process.env.ADMIN_ALLOWLIST || "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
@@ -66,11 +74,26 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   const userId = verifyToken(store.get(USER_COOKIE)?.value);
   if (!userId) return null;
   try {
-    return await prisma.user.findUnique({
+    const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, firstName: true, lastName: true, email: true, phone: true },
+      select: { id: true, firstName: true, lastName: true, email: true, phone: true, role: true },
     });
+    if (!user) return null;
+    // Bootstrap: an allowlisted email is always an admin — persist the role so it
+    // shows in the Users list and survives allowlist changes.
+    if (user.role !== "ADMIN" && adminAllowlist().includes(user.email.toLowerCase())) {
+      await prisma.user.update({ where: { id: user.id }, data: { role: "ADMIN" } }).catch(() => {});
+      return { ...user, role: "ADMIN" };
+    }
+    return user;
   } catch {
     return null;
   }
+}
+
+/** True when the signed-in user is an admin (role ADMIN or allowlisted email). */
+export async function isCurrentUserAdmin(): Promise<boolean> {
+  const user = await getCurrentUser();
+  if (!user) return false;
+  return user.role === "ADMIN" || adminAllowlist().includes(user.email.toLowerCase());
 }
