@@ -13,6 +13,7 @@ import {
   CLASSIFICATIONS,
 } from "@nbr/core";
 import { findPromotableTeam, mergeTeams } from "./teams";
+import { sendEmail, emailLayout, siteUrl } from "./email";
 import {
   ADMIN_COOKIE,
   adminCookieOptions,
@@ -356,7 +357,24 @@ export async function setTdStatusAction(formData: FormData): Promise<void> {
   const userId = String(formData.get("userId") ?? "");
   const status = String(formData.get("status") ?? "");
   if (!userId || !["APPROVED", "REJECTED", "NONE"].includes(status)) return;
-  await prisma.user.update({ where: { id: userId }, data: { tdStatus: status } });
+  const user = await prisma.user.update({ where: { id: userId }, data: { tdStatus: status } });
+
+  if (status === "APPROVED" || status === "REJECTED") {
+    await sendEmail({
+      to: user.email,
+      subject:
+        status === "APPROVED"
+          ? "You’re approved as a tournament director"
+          : "Tournament-director request update",
+      html: emailLayout(
+        status === "APPROVED" ? "You’re approved!" : "Request reviewed",
+        status === "APPROVED"
+          ? `<p>Your tournament-director request has been approved. You can now create tournaments and invite teams.</p>`
+          : `<p>Your tournament-director request was not approved at this time. Contact us if you have questions.</p>`,
+        status === "APPROVED" ? { label: "Open TD portal", url: siteUrl("/td") } : undefined,
+      ),
+    });
+  }
   revalidatePath("/admin");
 }
 

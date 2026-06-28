@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@nbr/db";
 import { getCurrentUser } from "./user-auth";
+import { sendEmail, emailLayout, siteUrl } from "./email";
 import type { AccountState } from "./account-actions";
 
 /** Verify the signed-in user owns the claim for a team. */
@@ -53,6 +54,24 @@ export async function sendScrimmageRequestAction(formData: FormData): Promise<vo
     await prisma.scrimmageRequest.create({
       data: { fromTeamId, toTeamId, fromUserId: user!.id, message },
     });
+
+    // Notify the recipient team's coach.
+    const [fromTeam, toTeam] = await Promise.all([
+      prisma.team.findUnique({ where: { id: fromTeamId }, select: { name: true } }),
+      prisma.team.findUnique({ where: { id: toTeamId }, include: { claim: { include: { user: true } } } }),
+    ]);
+    if (toTeam?.claim?.user?.email) {
+      await sendEmail({
+        to: toTeam.claim.user.email,
+        subject: `Scrimmage request for ${toTeam.name}`,
+        html: emailLayout(
+          "New scrimmage request",
+          `<p><strong>${fromTeam?.name ?? "A team"}</strong> would like to scrimmage <strong>${toTeam.name}</strong>.</p>
+           ${message ? `<p>“${message}”</p>` : ""}`,
+          { label: "Respond in your account", url: siteUrl("/account") },
+        ),
+      });
+    }
   }
   revalidatePath("/scrimmages");
   revalidatePath("/account");

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@nbr/db";
 import { getCurrentUser } from "./user-auth";
+import { sendEmail, adminEmail, emailLayout, siteUrl } from "./email";
 import type { AccountState } from "./account-actions";
 
 async function requireApprovedTd(): Promise<string> {
@@ -34,6 +35,19 @@ export async function requestTdAction(_prev: AccountState, formData: FormData): 
       tdWebsite: website,
     },
   });
+
+  // Notify the administrator that a request is awaiting review.
+  await sendEmail({
+    to: adminEmail(),
+    subject: "New tournament-director request",
+    html: emailLayout(
+      "New tournament-director request",
+      `<p><strong>${user!.firstName ?? ""} ${user!.lastName ?? ""}</strong> (${user!.email}) requested tournament-director access.</p>
+       <p>Tournament: ${tournamentName ?? "—"}<br/>Organization: ${org ?? "—"}<br/>Website: ${website ?? "—"}</p>`,
+      { label: "Review in admin", url: siteUrl("/admin") },
+    ),
+  });
+
   revalidatePath("/account");
   return {
     ok: true,
@@ -81,6 +95,25 @@ export async function inviteTeamAction(formData: FormData): Promise<void> {
   // Never re-invite a team that declined; don't duplicate an existing invite.
   if (existing) return;
   await prisma.tournamentInvite.create({ data: { tournamentId, teamId } });
+
+  // Notify the team's coach (if claimed).
+  const [team, tournament] = await Promise.all([
+    prisma.team.findUnique({ where: { id: teamId }, include: { claim: { include: { user: true } } } }),
+    prisma.tournament.findUnique({ where: { id: tournamentId } }),
+  ]);
+  if (team?.claim?.user?.email) {
+    await sendEmail({
+      to: team.claim.user.email,
+      subject: `${team.name} invited to ${tournament?.name ?? "a tournament"}`,
+      html: emailLayout(
+        "You’ve got a tournament invitation",
+        `<p><strong>${team.name}</strong> has been invited to <strong>${tournament?.name ?? "a tournament"}</strong>.</p>
+         <p>Accept or decline from your account.</p>`,
+        { label: "View invitation", url: siteUrl("/account") },
+      ),
+    });
+  }
+
   revalidatePath(`/td/${tournamentId}`);
 }
 
