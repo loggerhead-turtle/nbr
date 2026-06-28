@@ -35,8 +35,8 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
 export default async function TeamPage({ params }: Params) {
   const { slug } = await params;
   const team = await getTeamBySlug(slug);
-  // Unclassified teams (no age group) are admin-only and not published publicly.
-  if (!team || !team.ageGroup) notFound();
+  // Unclassified teams (no age group and no varsity class) are admin-only.
+  if (!team || (!team.ageGroup && !team.classification)) notFound();
 
   const games = [
     ...team.homeGames.map((g) => ({
@@ -87,7 +87,7 @@ export default async function TeamPage({ params }: Params) {
             <h1 className="text-2xl font-black text-navy-900">{team.name}</h1>
             <p className="mt-1 text-sm text-slate-500">
               {team.city ? `${team.city}, ${team.state}` : team.state} ·{" "}
-              {ageGroupLabel(team.ageGroup)}
+              {team.classification ? `Varsity · ${team.classification}` : ageGroupLabel(team.ageGroup)}
               {team.division ? ` · ${team.division}` : ""}
             </p>
             <div className="mt-3 flex flex-wrap items-center gap-2">

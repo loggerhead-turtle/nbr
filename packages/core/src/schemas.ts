@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+// Utah high-school classifications, largest enrollment to smallest.
+export const CLASSIFICATIONS = ["6A", "5A", "4A", "3A", "2A", "1A"] as const;
+
 export const AGE_GROUPS = [
   "U8",
   "U9",

@@ -81,6 +81,33 @@ export async function pageDiagnostics(page: Page): Promise<unknown> {
   });
 }
 
+/** Render an arbitrary URL (used by the MaxPreps harvester). */
+export async function openUrl(
+  context: BrowserContext,
+  url: string,
+): Promise<{ page: Page; httpStatus: number | null }> {
+  const page = await context.newPage();
+  const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  await sleep(randInt(1500, 3500));
+  await humanScroll(page);
+  await sleep(randInt(600, 1400));
+  return { page, httpStatus: response?.status() ?? null };
+}
+
+/** All anchors on the page as {href, text} — for harvesting team links. */
+export async function pageLinks(page: Page): Promise<{ href: string; text: string }[]> {
+  return page.evaluate(() => {
+    const out: { href: string; text: string }[] = [];
+    for (const a of Array.from(document.querySelectorAll("a[href]")) as HTMLAnchorElement[]) {
+      const href = a.href; // absolute
+      const text = (a.textContent || "").replace(/\s+/g, " ").trim();
+      if (href) out.push({ href, text });
+    }
+    return out;
+  });
+}
+
 async function humanScroll(page: Page): Promise<void> {
   const steps = randInt(2, 5);
   for (let i = 0; i < steps; i++) {

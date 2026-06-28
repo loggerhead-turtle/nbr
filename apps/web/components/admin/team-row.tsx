@@ -2,7 +2,7 @@
 
 import { useActionState } from "react";
 import { updateTeamAction, deleteTeamAction, type ActionState } from "@/lib/admin-actions";
-import { AGE_GROUPS } from "@nbr/core";
+import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
 const initial: ActionState = {};
 
@@ -11,6 +11,7 @@ export interface TeamRowData {
   name: string;
   gcTeamId: string | null;
   ageGroup: string | null;
+  classification: string | null;
   scrapeEnabled: boolean;
   isGhost: boolean;
   games: number;
@@ -19,6 +20,7 @@ export interface TeamRowData {
 
 export function TeamRow({ team }: { team: TeamRowData }) {
   const [state, action, pending] = useActionState(updateTeamAction, initial);
+  const unclassified = !team.ageGroup && !team.classification;
 
   return (
     <div className="card p-4">
@@ -38,16 +40,31 @@ export function TeamRow({ team }: { team: TeamRowData }) {
           />
         </div>
         <div>
-          <label className="label">Age</label>
+          <label className="label">Age (youth)</label>
           <select
             name="ageGroup"
             defaultValue={team.ageGroup ?? ""}
-            className={`input ${team.ageGroup ? "" : "border-amber-400 bg-amber-50"}`}
+            className={`input ${unclassified ? "border-amber-400 bg-amber-50" : ""}`}
           >
-            <option value="">Unclassified</option>
+            <option value="">—</option>
             {AGE_GROUPS.map((a) => (
               <option key={a} value={a}>
                 {a}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Class (varsity)</label>
+          <select
+            name="classification"
+            defaultValue={team.classification ?? ""}
+            className={`input ${unclassified ? "border-amber-400 bg-amber-50" : ""}`}
+          >
+            <option value="">—</option>
+            {CLASSIFICATIONS.map((c) => (
+              <option key={c} value={c}>
+                {c}
               </option>
             ))}
           </select>

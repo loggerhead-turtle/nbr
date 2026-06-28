@@ -17,7 +17,7 @@ export default async function ManageTeamsPage({
 
   const where: Prisma.TeamWhereInput = {
     ...(q ? { name: { contains: q, mode: "insensitive" } } : {}),
-    ...(unclassifiedOnly ? { ageGroup: null } : {}),
+    ...(unclassifiedOnly ? { ageGroup: null, classification: null } : {}),
   };
 
   const [teams, unclassifiedCount] = await Promise.all([
@@ -27,7 +27,7 @@ export default async function ManageTeamsPage({
       include: { _count: { select: { homeGames: true, awayGames: true } } },
       take: 500,
     }),
-    prisma.team.count({ where: { ageGroup: null } }),
+    prisma.team.count({ where: { ageGroup: null, classification: null } }),
   ]);
 
   const rows: TeamRowData[] = teams.map((t) => ({
@@ -35,6 +35,7 @@ export default async function ManageTeamsPage({
     name: t.name,
     gcTeamId: t.gcTeamId,
     ageGroup: t.ageGroup,
+    classification: t.classification,
     scrapeEnabled: t.scrapeEnabled,
     isGhost: t.isGhost,
     games: t._count.homeGames + t._count.awayGames,

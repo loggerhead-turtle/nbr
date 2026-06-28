@@ -11,7 +11,7 @@ export default async function AdminDashboard() {
       prisma.team.count({ where: { isGhost: true } }),
       prisma.game.count({ where: { status: "FINAL" } }),
       prisma.game.count({ where: { source: "SCRAPE" } }),
-      prisma.team.count({ where: { ageGroup: null } }),
+      prisma.team.count({ where: { ageGroup: null, classification: null } }),
       prisma.ratingRun.findFirst({ orderBy: { startedAt: "desc" } }),
       prisma.scrapeJob.findMany({ orderBy: { startedAt: "desc" }, take: 8, include: { team: true } }),
     ]);

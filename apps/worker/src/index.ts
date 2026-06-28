@@ -7,6 +7,7 @@
  */
 import { prisma } from "@nbr/db";
 import { runScrape } from "./scraper/runScrape.js";
+import { runMaxPreps } from "./scraper/runMaxPreps.js";
 import { runRecompute } from "./ratings/runRecompute.js";
 
 async function main() {
@@ -16,11 +17,14 @@ async function main() {
     case "scrape":
       await runScrape();
       break;
+    case "maxpreps":
+      await runMaxPreps();
+      break;
     case "recompute":
       await runRecompute();
       break;
     default:
-      console.error("Usage: node src/index.ts <scrape|recompute>");
+      console.error("Usage: node src/index.ts <scrape|maxpreps|recompute>");
       process.exitCode = 1;
   }
 }

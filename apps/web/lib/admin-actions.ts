@@ -4,7 +4,14 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma, GameSource, GameStatus } from "@nbr/db";
-import { createTeamSchema, createGameSchema, teamSlug, gcTeamIdSchema, AGE_GROUPS } from "@nbr/core";
+import {
+  createTeamSchema,
+  createGameSchema,
+  teamSlug,
+  gcTeamIdSchema,
+  AGE_GROUPS,
+  CLASSIFICATIONS,
+} from "@nbr/core";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import {
   ADMIN_COOKIE,
@@ -307,6 +314,10 @@ export async function updateTeamAction(
   const rawAge = String(formData.get("ageGroup") ?? "").trim();
   const ageGroup = rawAge && (AGE_GROUPS as readonly string[]).includes(rawAge) ? rawAge : null;
 
+  const rawClass = String(formData.get("classification") ?? "").trim();
+  const classification =
+    rawClass && (CLASSIFICATIONS as readonly string[]).includes(rawClass) ? rawClass : null;
+
   try {
     await prisma.team.update({
       where: { id },
@@ -315,6 +326,7 @@ export async function updateTeamAction(
         gcTeamId,
         scrapeEnabled,
         ageGroup: ageGroup as never,
+        classification,
         // Reset scrape bookkeeping so a corrected ID gets re-scraped promptly.
         lastScrapedAt: null,
         nextScrapeAfter: null,

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getRatings } from "@/lib/queries";
 import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
 import { ProvisionalBadge, GhostBadge } from "@/components/badges";
-import { AGE_GROUPS } from "@nbr/core";
+import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
 export const revalidate = 3600; // ISR: static-fast, refreshed hourly
 
@@ -14,6 +14,7 @@ export default async function HomePage({
   const sp = await searchParams;
   const search = sp.q?.trim() || undefined;
   const ageGroup = sp.age || undefined;
+  const classification = sp.class || undefined;
   const includeProvisional = sp.prov === "1";
   const sort = (sp.sort as "rating" | "name" | "games") || "rating";
   const page = Number(sp.page) || 1;
@@ -21,6 +22,7 @@ export default async function HomePage({
   const { rows, total } = await getRatings({
     search,
     ageGroup,
+    classification,
     includeProvisional,
     sort,
     page,
@@ -35,6 +37,7 @@ export default async function HomePage({
         <FilterBar
           search={search}
           ageGroup={ageGroup}
+          classification={classification}
           includeProvisional={includeProvisional}
           sort={sort}
         />
@@ -54,7 +57,7 @@ export default async function HomePage({
                 <tr>
                   <th className="px-4 py-3">#</th>
                   <th className="px-4 py-3">Team</th>
-                  <th className="px-4 py-3">Age</th>
+                  <th className="px-4 py-3">Class / Age</th>
                   <th className="px-4 py-3 text-right">Record</th>
                   <th className="px-4 py-3 text-right">Rating</th>
                 </tr>
@@ -80,7 +83,9 @@ export default async function HomePage({
                           {r.isGhost && <GhostBadge />}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">{ageGroupLabel(r.ageGroup)}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {r.classification ? `Varsity ${r.classification}` : ageGroupLabel(r.ageGroup)}
+                      </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-600">
                         {formatRecord(r.wins, r.losses, r.ties)}
                       </td>
@@ -131,11 +136,13 @@ function Hero() {
 function FilterBar({
   search,
   ageGroup,
+  classification,
   includeProvisional,
   sort,
 }: {
   search?: string;
   ageGroup?: string;
+  classification?: string;
   includeProvisional: boolean;
   sort: string;
 }) {
@@ -154,8 +161,21 @@ function FilterBar({
         />
       </div>
       <div>
+        <label className="label" htmlFor="class">
+          Classification <span className="font-normal text-slate-400">(varsity)</span>
+        </label>
+        <select id="class" name="class" defaultValue={classification ?? ""} className="input">
+          <option value="">All</option>
+          {CLASSIFICATIONS.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
         <label className="label" htmlFor="age">
-          Age group
+          Age group <span className="font-normal text-slate-400">(youth)</span>
         </label>
         <select id="age" name="age" defaultValue={ageGroup ?? ""} className="input">
           <option value="">All</option>

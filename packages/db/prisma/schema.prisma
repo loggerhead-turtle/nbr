@@ -85,6 +85,11 @@ model Team {
   slug     String    @unique
   ageGroup AgeGroup?
   division String?
+  // High-school varsity classification ("1A".."6A"). When set, the team is a
+  // varsity team rather than a youth (age-group) team.
+  classification String?
+  // MaxPreps team page URL (data source for high-school varsity teams).
+  maxprepsUrl    String? @unique
 
   // Location (city/state shown publicly; zip + lat/long power Phase 2 proximity).
   city      String?
@@ -124,6 +129,7 @@ model Team {
   scrimmagePref ScrimmagePref?
 
   @@index([state, ageGroup])
+  @@index([classification])
   @@index([isGhost])
   @@index([scrapeEnabled, nextScrapeAfter])
 }

@@ -57,6 +57,18 @@ services:
       - fromGroup: nbr
 
   # Rating recompute, semi-weekly (Sun & Wed mornings, after weekend/Mon games).
+  # MaxPreps harvester (Utah HS varsity). HS season is over, so this is run
+  # manually via Trigger Run; the schedule is just a rare placeholder.
+  - type: cron
+    name: nbr-maxpreps
+    runtime: docker
+    dockerfilePath: ./apps/worker/Dockerfile
+    dockerCommand: pnpm --filter @nbr/worker maxpreps
+    schedule: "0 9 1 7 *" # 09:00 on Jul 1 (placeholder; trigger manually)
+    autoDeploy: true
+    envVars:
+      - fromGroup: nbr
+
   # Recompute needs no browser, so it runs on the plain Node runtime (no Docker).
   - type: cron
     name: nbr-recompute

@@ -7,6 +7,7 @@ export interface RatingRow {
   city: string | null;
   state: string;
   ageGroup: string | null;
+  classification: string | null;
   isGhost: boolean;
   rating: number;
   rd: number;
@@ -20,6 +21,7 @@ export interface RatingRow {
 export interface RatingsQuery {
   search?: string;
   ageGroup?: string;
+  classification?: string;
   includeProvisional?: boolean;
   sort?: "rating" | "name" | "games";
   page?: number;
@@ -36,14 +38,20 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
   const where: Prisma.TeamWhereInput = {
     isActive: true,
     rating: { isNot: null },
-    // Public side requires a classified age group; unclassified teams are admin-only.
-    ageGroup: { not: null },
+    // Public side requires a classification: a youth age group OR a varsity class.
+    // Unclassified teams are admin-only.
+    OR: [{ ageGroup: { not: null } }, { classification: { not: null } }],
   };
   if (q.search) {
     where.name = { contains: q.search, mode: "insensitive" };
   }
   if (q.ageGroup) {
     where.ageGroup = q.ageGroup as Prisma.TeamWhereInput["ageGroup"];
+    delete where.OR;
+  }
+  if (q.classification) {
+    where.classification = q.classification;
+    delete where.OR;
   }
   if (!q.includeProvisional) {
     where.rating = { is: { isProvisional: false } };
@@ -77,6 +85,7 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
         city: t.city,
         state: t.state,
         ageGroup: t.ageGroup,
+        classification: t.classification,
         isGhost: t.isGhost,
         rating: t.rating!.rating,
         rd: t.rating!.rd,
@@ -118,7 +127,10 @@ export async function getTeamBySlug(slug: string) {
 
 export async function getAllTeamSlugs(): Promise<{ slug: string; updatedAt: Date }[]> {
   return prisma.team.findMany({
-    where: { isActive: true, ageGroup: { not: null } },
+    where: {
+      isActive: true,
+      OR: [{ ageGroup: { not: null } }, { classification: { not: null } }],
+    },
     select: { slug: true, updatedAt: true },
   });
 }
