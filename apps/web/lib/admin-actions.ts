@@ -14,6 +14,7 @@ import {
   geocodeCity,
 } from "@nbr/core";
 import { findPromotableTeam, mergeTeams } from "./teams";
+import { triggerScrapeTeam, triggerScrapeNew } from "./render-jobs";
 import { sendEmail, emailLayout, siteUrl } from "./email";
 import { getCurrentSeasonYear } from "./season";
 import {
@@ -93,8 +94,9 @@ export async function createTeamAction(
         rating: { create: {} },
       },
     });
+    await triggerScrapeTeam(gcTeamId);
     revalidatePath("/admin/teams");
-    return { ok: true, message: "Added. Name and details fill in on the next scrape." };
+    return { ok: true, message: "Added. Scraping now; name and details fill in shortly." };
   }
 
   const raw = {
@@ -141,13 +143,14 @@ export async function createTeamAction(
         consecutiveFailures: 0,
       },
     });
+    if (data.gcTeamId) await triggerScrapeTeam(data.gcTeamId);
     revalidatePath("/");
     revalidatePath("/admin/teams");
     return {
       ok: true,
       message: `Linked to existing team “${promo.name}” (kept its ${promo.games} game${
         promo.games === 1 ? "" : "s"
-      }). It will be scraped on the next run.`,
+      }). Scraping now.`,
     };
   }
 
@@ -170,6 +173,7 @@ export async function createTeamAction(
     },
   });
 
+  if (team.gcTeamId) await triggerScrapeTeam(team.gcTeamId);
   revalidatePath("/");
   revalidatePath("/admin");
   return { ok: true, message: `Added ${team.name}. Slug: ${team.slug}` };
@@ -218,13 +222,14 @@ export async function quickAddTeamsAction(
     added += 1;
   }
 
+  if (added > 0) await triggerScrapeNew();
   revalidatePath("/admin/teams");
   const parts = [`Added ${added} team${added === 1 ? "" : "s"}`];
   if (skipped) parts.push(`${skipped} already present`);
   if (invalid.length) parts.push(`${invalid.length} invalid (${invalid.slice(0, 3).join(", ")})`);
   return {
     ok: true,
-    message: `${parts.join(" · ")}. Names and details fill in automatically on the next scrape.`,
+    message: `${parts.join(" · ")}. Scraping now; names and details fill in shortly.`,
   };
 }
 
