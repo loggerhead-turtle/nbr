@@ -19,18 +19,26 @@ export default function AboutPage() {
 
       <Section title="One global model, not head-to-head">
         Most teams never play each other directly. NBR doesn’t need them to. We solve the{" "}
-        <strong>entire web of games at once</strong> — a global statistical model
-        (Bradley-Terry, the foundation of modern rating systems) finds the single set of ratings
-        that best explains every result across the whole state. Strength flows through{" "}
+        <strong>entire web of games at once</strong> — a single statistical model finds the one set
+        of ratings that best explains every result across the whole state. Strength flows through{" "}
         <strong>chains of common opponents</strong>: if your opponents beat the teams that beat
-        other teams, that all feeds your rating. Tournaments are the bridges that connect
-        everyone into one comparable pool.
+        other teams, that all feeds your rating. Tournaments are the bridges that connect everyone
+        into one comparable pool.
       </Section>
 
       <Section title="Margin of victory (capped)">
         A blowout says more than a one-run nail-biter, so bigger wins move the needle more — but
         with <strong>diminishing returns</strong>. Winning 12–2 counts well above winning 6–5;
         winning 25–0 counts barely more than 12–2. Running up the score doesn’t pad your rating.
+      </Section>
+
+      <Section title="Hard to game">
+        Because every team is solved together from the same web of results, there’s no easy way to
+        inflate a rating. <strong>Quality of opponent is what counts</strong> — beating weak teams
+        barely moves you, and padding the schedule with easy wins can even lower your rating relative
+        to teams testing themselves against tougher fields. Running up the score doesn’t help (margin
+        is capped), and old results fade as recent games take over. The most reliable way up is
+        simple: <strong>play good teams and beat them</strong>.
       </Section>
 
       <Section title="Recent games matter most">
