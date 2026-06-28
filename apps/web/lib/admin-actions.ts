@@ -351,6 +351,24 @@ export async function mergeTeamAction(formData: FormData): Promise<void> {
   revalidatePath("/");
 }
 
+export async function dismissDuplicateAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const a = String(formData.get("teamIdA") ?? "");
+  const b = String(formData.get("teamIdB") ?? "");
+  if (!a || !b || a === b) return;
+  const [teamIdA, teamIdB] = a < b ? [a, b] : [b, a];
+  try {
+    await prisma.duplicateDismissal.upsert({
+      where: { teamIdA_teamIdB: { teamIdA, teamIdB } },
+      create: { teamIdA, teamIdB },
+      update: {},
+    });
+  } catch {
+    // ignore
+  }
+  revalidatePath("/admin/duplicates");
+}
+
 export async function deleteTeamAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("teamId") ?? "");

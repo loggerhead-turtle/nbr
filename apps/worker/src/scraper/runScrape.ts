@@ -55,9 +55,10 @@ export async function runScrape(): Promise<void> {
       }
       if (result.status === "EMPTY") emptyOrZero += 1;
 
-      // Polite, human-like delay before the next team.
+      // Polite, human-like delay before the next team. Configurable so a
+      // one-time bulk backfill can run faster (restore higher values after).
       if (team !== batch[batch.length - 1]) {
-        await jitterDelay(30, 120);
+        await jitterDelay(envNum("SCRAPER_MIN_DELAY_SEC", 30), envNum("SCRAPER_MAX_DELAY_SEC", 120));
       }
     }
   } finally {

@@ -259,6 +259,17 @@ model TournamentPool {
   @@index([createdAt])
 }
 
+// Admin "don't merge" decisions so dismissed duplicate pairs don't resurface.
+// Pair is stored canonically (teamIdA < teamIdB).
+model DuplicateDismissal {
+  id        String   @id @default(cuid())
+  teamIdA   String
+  teamIdB   String
+  createdAt DateTime @default(now())
+
+  @@unique([teamIdA, teamIdB])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 2 — users / claims / reports / scrimmage.
 // Defined now so they require only additive migrations; not wired into the MVP UI.
