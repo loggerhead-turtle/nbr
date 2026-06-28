@@ -24,6 +24,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@nbr/core": "workspace:*",
     "@prisma/client": "^5.22.0"
   },
   "devDependencies": {

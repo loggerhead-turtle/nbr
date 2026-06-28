@@ -3,11 +3,11 @@
  * Records a ScrapeJob and updates the team's scrape bookkeeping. Never throws to
  * the caller — failures are captured in the returned status.
  */
-import { prisma, ScrapeStatus } from "@nbr/db";
+import { prisma, ScrapeStatus, AgeGroup, findPromotableTeam, mergeTeams } from "@nbr/db";
 import { normalizeTeamName, teamSlug } from "@nbr/core";
 import type { BrowserContext } from "playwright";
 import { openSchedule, pageDiagnostics } from "./browser.js";
-import { parseSchedule, type ParsedGame } from "./parseSchedule.js";
+import { parseScheduleText, parseTeamHeader, type ParsedGame } from "./parseSchedule.js";
 import { computeNextScrapeAfter, type DueTeam } from "./scheduling.js";
 import { envBool } from "../util.js";
 
@@ -51,7 +51,13 @@ export async function scrapeTeam(
     if (hs === 403 || hs === 429) {
       status = "BLOCKED";
     } else {
-      const parsed = await parseSchedule(page);
+      const bodyText = await page.evaluate(() => document.body?.innerText ?? "");
+
+      // Enrich a quick-added (ID-only) team from its page header, then collapse
+      // any matching ghost into it so the games line up under one record.
+      await enrichTeam(team.id, bodyText);
+
+      const parsed = parseScheduleText(bodyText);
       const finals = parsed.filter((g) => g.isFinal && g.teamScore != null && g.opponentScore != null);
       gamesFound = finals.length;
 
@@ -102,6 +108,53 @@ export async function scrapeTeam(
   });
 
   return { status, gamesFound, gamesNew, httpStatus };
+}
+
+/**
+ * Fill in a quick-added (ID-only) team's name/city/age from its page header,
+ * give it a real slug, and merge any matching ghost team into it.
+ */
+async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
+  const t = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { needsEnrichment: true, name: true, city: true, ageGroup: true },
+  });
+  if (!t?.needsEnrichment) return;
+
+  const header = parseTeamHeader(bodyText);
+  if (!header.name) return; // error page / couldn't parse — try again next run
+
+  const ageGroup = (t.ageGroup ?? header.ageGroup) as AgeGroup | null;
+  const slug = await uniqueSlug(teamSlug(header.name, header.ageGroup), teamId);
+
+  await prisma.team.update({
+    where: { id: teamId },
+    data: {
+      name: header.name,
+      city: t.city ?? header.city ?? undefined,
+      ageGroup: ageGroup ?? undefined,
+      slug,
+      needsEnrichment: false,
+    },
+  });
+  console.log(`[scrape] enriched ${teamId} → "${header.name}"`);
+
+  // Collapse a duplicate ghost (created from an opponent's schedule) into this team.
+  const promo = await findPromotableTeam(header.name, header.ageGroup);
+  if (promo && promo.id !== teamId) {
+    await mergeTeams(promo.id, teamId);
+    console.log(`[scrape] merged ghost "${promo.name}" into ${teamId}`);
+  }
+}
+
+async function uniqueSlug(base: string, excludeId: string): Promise<string> {
+  let slug = base || "team";
+  let n = 2;
+  while (true) {
+    const existing = await prisma.team.findUnique({ where: { slug }, select: { id: true } });
+    if (!existing || existing.id === excludeId) return slug;
+    slug = `${base}-${n++}`;
+  }
 }
 
 /** Resolve opponent → upsert the game by gcGameId. Returns true if newly created. */

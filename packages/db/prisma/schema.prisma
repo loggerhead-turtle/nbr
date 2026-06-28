@@ -97,6 +97,9 @@ model Team {
   // Ghost teams are opponents auto-created from scraped games before an admin
   // has formally added/enriched them. They still contribute to ratings.
   isGhost  Boolean @default(false)
+  // Set when a team was quick-added by GameChanger ID only; the scraper fills in
+  // the real name/city/age group from the team's page on its first run.
+  needsEnrichment Boolean @default(false)
 
   // Scraper controls.
   scrapeEnabled       Boolean   @default(true)

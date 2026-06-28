@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseScheduleText, ParsedGame } from "./parseSchedule.js";
+import { parseScheduleText, parseTeamHeader, ParsedGame } from "./parseSchedule.js";
 
 // Real text captured from a GameChanger public schedule page (Utah Warriors 14U).
 const SAMPLE = `Pricing Support Sign In Join Us Utah Warriors 14U 16-17 Spring 2026 Orem, UT Staff: Jennifer Eaquinto, Greg Larsen, Gabe Eyerly, Nathan & Heidi Rich Follow team HOME SCHEDULE TEAM STATS Schedule March 2026 SAT 7 @ GBG Utah 14U Navy L 3-4 vs. Cannons Baseball 14U L 1-7 @ Guerilla 14U W 4-2 MON 16 @ Lightning Baseball Ahrens 14U W 15-1 TUE 17 @ Fort Collins Force NoCo 14u L 6-7 vs. Slammers Stealth 14U L 3-5 WED 18 vs. Slammers Stealth 14U L 2-6 April 2026 MON 13 vs. Cannons Baseball 14U W 6-5 vs. Utah Prime 14U L 2-12 WED 22 @ Vice 13U W 6-5 FRI 24 @ Sanpete Rampage 14U W 13-0 vs. Honey Badgers 14U L 10-12 SAT 25 vs. Nephi Aces 14U W 10-2 @ Milford Tigers 14u W 15-0 MON 27 vs. Wasatch Baseball Club 14U 4:20 PM @ Honey Badgers 14U 6:20 PM May 2026 FRI 1 @ Utah Owlz 14U L 4-11 MON 4 @ Diamond Devils 14U W 9-4 @ Juab Blaze 14U L 2-7 June 2026 MON 1 vs. Wasatch Baseball Club 14U L 6-8 @ Honey Badgers 14U L 6-9 Get the App Fan Pricing Status Privacy Terms`;
@@ -50,5 +50,21 @@ describe("parseScheduleText (GameChanger schedule)", () => {
 
   it("returns nothing for an error page", () => {
     expect(parseScheduleText("Oops! We couldn't load this page. Reload Contact Support")).toEqual([]);
+  });
+});
+
+describe("parseTeamHeader", () => {
+  it("extracts name, city, state, and age group", () => {
+    const h = parseTeamHeader(SAMPLE);
+    expect(h.name).toBe("Utah Warriors 14U");
+    expect(h.city).toBe("Orem");
+    expect(h.state).toBe("UT");
+    expect(h.ageGroup).toBe("U14");
+  });
+
+  it("returns nulls for the error page", () => {
+    const h = parseTeamHeader("Pricing Support Sign In Join Us Oops! We couldn’t load this page.");
+    expect(h.name).toBeNull();
+    expect(h.ageGroup).toBeNull();
   });
 });

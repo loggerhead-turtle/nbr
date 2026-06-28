@@ -132,6 +132,57 @@ export async function createTeamAction(
   return { ok: true, message: `Added ${team.name}. Slug: ${team.slug}` };
 }
 
+export async function quickAddTeamsAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+
+  const raw = String(formData.get("ids") ?? "");
+  const tokens = raw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+  if (tokens.length === 0) return { error: "Paste at least one GameChanger team ID." };
+
+  let added = 0;
+  let skipped = 0;
+  const invalid: string[] = [];
+
+  for (const token of tokens) {
+    const parsed = gcTeamIdSchema.safeParse(token);
+    if (!parsed.success) {
+      invalid.push(token);
+      continue;
+    }
+    const gcTeamId = parsed.data;
+    const existing = await prisma.team.findUnique({ where: { gcTeamId } });
+    if (existing) {
+      skipped += 1;
+      continue;
+    }
+    const slug = await uniqueSlug(`gc-${gcTeamId.toLowerCase()}`);
+    await prisma.team.create({
+      data: {
+        name: `Unnamed team (${gcTeamId})`,
+        gcTeamId,
+        slug,
+        state: "UT",
+        needsEnrichment: true,
+        scrapeEnabled: true,
+        rating: { create: {} },
+      },
+    });
+    added += 1;
+  }
+
+  revalidatePath("/admin/teams");
+  const parts = [`Added ${added} team${added === 1 ? "" : "s"}`];
+  if (skipped) parts.push(`${skipped} already present`);
+  if (invalid.length) parts.push(`${invalid.length} invalid (${invalid.slice(0, 3).join(", ")})`);
+  return {
+    ok: true,
+    message: `${parts.join(" · ")}. Names and details fill in automatically on the next scrape.`,
+  };
+}
+
 export async function createGameAction(
   _prev: ActionState,
   formData: FormData,

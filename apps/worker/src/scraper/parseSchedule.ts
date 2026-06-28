@@ -36,6 +36,53 @@ export async function parseSchedule(page: Page): Promise<ParsedGame[]> {
   return parseScheduleText(text);
 }
 
+export interface TeamHeader {
+  name: string | null;
+  city: string | null;
+  state: string | null;
+  ageGroup: string | null; // AgeGroup enum value (U8..U18) or null
+}
+
+const VALID_AGE_GROUPS = new Set([
+  "U8", "U9", "U10", "U11", "U12", "U13", "U14", "U15", "U16", "U17", "U18",
+]);
+
+/**
+ * Extract a team's own details from its rendered page header, which reads like:
+ *   "... Sign In Join Us Utah Warriors 14U 16-17 Spring 2026 Orem, UT Staff: ..."
+ * i.e. <name> <record> <season> <City, ST> before "Staff:" / "Follow team".
+ */
+export function parseTeamHeader(rawText: string): TeamHeader {
+  const empty: TeamHeader = { name: null, city: null, state: null, ageGroup: null };
+  const text = rawText.replace(/\s+/g, " ").trim();
+  if (!text || /Oops! We could/i.test(text)) return empty;
+
+  const after = text.split(/Join Us\s+/i)[1] ?? text;
+  const chunk = after.split(/\s+(?:Staff:|Follow team|HOME\s+SCHEDULE)/i)[0] ?? after;
+
+  const loc = chunk.match(/([A-Za-z][A-Za-z .'’-]+),\s*([A-Z]{2})\b/);
+  const rec = chunk.match(/\b\d{1,2}-\d{1,2}\b/);
+  const season = chunk.match(/\b(Spring|Summer|Fall|Autumn|Winter)\s+\d{4}\b/i);
+
+  const idxs = [loc?.index, rec?.index, season?.index].filter(
+    (i): i is number => typeof i === "number",
+  );
+  const boundary = idxs.length ? Math.min(...idxs) : Math.min(chunk.length, 60);
+
+  let name = chunk.slice(0, boundary).replace(/[\s,]+$/, "").trim().slice(0, 120);
+
+  const ageMatch = name.match(/\b(\d{1,2})U\b/i) ?? name.match(/\bU(\d{1,2})\b/i);
+  let ageGroup: string | null = ageMatch ? `U${ageMatch[1]}` : null;
+  if (ageGroup && !VALID_AGE_GROUPS.has(ageGroup)) ageGroup = null;
+
+  return {
+    name: name.length >= 2 ? name : null,
+    city: loc?.[1]?.trim() ?? null,
+    state: loc?.[2] ?? null,
+    ageGroup,
+  };
+}
+
 const MONTHS: Record<string, number> = {
   january: 0, february: 1, march: 2, april: 3, may: 4, june: 5,
   july: 6, august: 7, september: 8, october: 9, november: 10, december: 11,
