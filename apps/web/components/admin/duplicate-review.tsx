@@ -60,8 +60,8 @@ export function DuplicateReview({ initialPairs }: { initialPairs: DupPair[] }) {
             <div className="flex items-center justify-between bg-navy-900 px-4 py-2 text-sm text-white">
               <span className="font-semibold">{pair.a.name}</span>
               <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs">
-                {pair.commonCount > 0
-                  ? `${pair.commonCount} shared game${pair.commonCount === 1 ? "" : "s"}`
+                {pair.commonGames.length > 0
+                  ? `${pair.commonGames.length} shared game${pair.commonGames.length === 1 ? "" : "s"}`
                   : "no shared games"}
               </span>
             </div>
@@ -70,6 +70,35 @@ export function DuplicateReview({ initialPairs }: { initialPairs: DupPair[] }) {
               <TeamSide team={pair.a} role="Keep" />
               <TeamSide team={pair.b} role="Merge in" />
             </div>
+
+            {pair.commonGames.length > 0 && (
+              <div className="border-t border-slate-100 px-4 py-3">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Shared games (same opponent &amp; date)
+                </p>
+                <ul className="space-y-1 text-sm">
+                  {pair.commonGames.slice(0, 8).map((g, i) => (
+                    <li key={i} className="flex items-center justify-between gap-2">
+                      <span className="truncate text-slate-600">
+                        {g.date} · vs {g.opponent}
+                      </span>
+                      <span className="flex items-center gap-2 tabular-nums">
+                        <span className="font-medium text-navy-800">
+                          {g.aUs}-{g.aThem}
+                        </span>
+                        <span className="text-slate-300">|</span>
+                        <span className="font-medium text-navy-800">
+                          {g.bUs}-{g.bThem}
+                        </span>
+                        <span title={g.scoresMatch ? "scores match" : "scores differ"}>
+                          {g.scoresMatch ? "✅" : "⚠️"}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             <div className="no-print flex flex-wrap gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
               <button
