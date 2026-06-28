@@ -117,12 +117,15 @@ function Hero() {
         </h1>
         <p className="mt-3 max-w-2xl text-navy-100">
           Independent, data-driven ratings for amateur baseball teams. Search any team’s
-          rating, or build perfectly balanced tournament pools in seconds — free, no login
-          required.
+          rating, build perfectly balanced tournament pools, or find an evenly matched
+          scrimmage nearby — free, no login required.
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link href="/pools" className="btn-accent">
             Generate Tournament Pools
+          </Link>
+          <Link href="/scrimmages" className="btn-accent">
+            Find a Scrimmage
           </Link>
           <Link href="/submit-team" className="btn-ghost bg-white text-navy-900 hover:bg-navy-50">
             + Add your team

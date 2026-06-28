@@ -4,7 +4,7 @@
  * the caller — failures are captured in the returned status.
  */
 import { prisma, ScrapeStatus, AgeGroup, findPromotableTeam, mergeTeams } from "@nbr/db";
-import { normalizeTeamName, teamSlug, ageGroupFromName } from "@nbr/core";
+import { normalizeTeamName, teamSlug, ageGroupFromName, geocodeCity } from "@nbr/core";
 import type { BrowserContext } from "playwright";
 import { openSchedule, pageDiagnostics } from "./browser.js";
 import { parseScheduleText, parseTeamHeader, type ParsedGame } from "./parseSchedule.js";
@@ -117,7 +117,15 @@ export async function scrapeTeam(
 async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
   const t = await prisma.team.findUnique({
     where: { id: teamId },
-    select: { needsEnrichment: true, name: true, city: true, ageGroup: true },
+    select: {
+      needsEnrichment: true,
+      name: true,
+      city: true,
+      state: true,
+      latitude: true,
+      locationLocked: true,
+      ageGroup: true,
+    },
   });
   if (!t) return;
 
@@ -125,9 +133,22 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
 
   // Always backfill missing location/age from the team's OWN page (every scrape),
   // so the whole population gets cities filled in over time. Never overwrite
-  // values already set, and never infer age from opponents.
+  // values already set, and never infer age from opponents. When an admin has
+  // locked the location (GameChanger sometimes reports a tournament's host city),
+  // leave city/coords untouched.
   const data: Record<string, unknown> = {};
-  if (!t.city && header.city) data.city = header.city;
+  if (!t.locationLocked && !t.city && header.city) data.city = header.city;
+
+  // Geocode to a centroid once we have a city but no coordinates, so the
+  // scrimmage finder can match by distance.
+  if (!t.locationLocked && t.latitude == null) {
+    const cityForGeo = (data.city as string | undefined) ?? t.city;
+    const geo = geocodeCity(cityForGeo, t.state);
+    if (geo) {
+      data.latitude = geo.lat;
+      data.longitude = geo.lng;
+    }
+  }
   // Age comes from the team's OWN page. Set it if missing, and ALSO advance it
   // when the team has aged up (header age is higher than what we have) — never
   // lower it (a decrease is almost certainly a misparse, and protects admin edits).

@@ -1,7 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
-import { updateTeamAction, deleteTeamAction, type ActionState } from "@/lib/admin-actions";
+import {
+  updateTeamAction,
+  deleteTeamAction,
+  clearTeamLocationAction,
+  type ActionState,
+} from "@/lib/admin-actions";
 import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 import { ageGroupLabel } from "@/lib/format";
 
@@ -14,6 +19,7 @@ export interface TeamRowData {
   ageGroup: string | null;
   classification: string | null;
   city: string | null;
+  locationLocked: boolean;
   scrapeEnabled: boolean;
   isGhost: boolean;
   games: number;
@@ -39,6 +45,15 @@ export function TeamRow({ team }: { team: TeamRowData }) {
             defaultValue={team.gcTeamId ?? ""}
             placeholder="(none)"
             className="input font-mono text-xs"
+          />
+        </div>
+        <div className="min-w-[130px]">
+          <label className="label">City</label>
+          <input
+            name="city"
+            defaultValue={team.city ?? ""}
+            placeholder="(none)"
+            className="input"
           />
         </div>
         <div>
@@ -82,6 +97,7 @@ export function TeamRow({ team }: { team: TeamRowData }) {
       <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
         <span>
           {team.city ? team.city : "no location"}
+          {team.locationLocked && " 🔒"}
           {" · "}
           {team.games} game{team.games === 1 ? "" : "s"}
           {team.isGhost && " · unverified"}
@@ -90,6 +106,22 @@ export function TeamRow({ team }: { team: TeamRowData }) {
         <div className="flex items-center gap-3">
           {state.error && <span className="font-medium text-rose-600">{state.error}</span>}
           {state.ok && <span className="font-medium text-emerald-600">{state.message}</span>}
+          {team.city && (
+            <form action={clearTeamLocationAction}>
+              <input type="hidden" name="teamId" value={team.id} />
+              <button
+                type="submit"
+                className="font-medium text-slate-500 hover:text-slate-700"
+                onClick={(e) => {
+                  if (!confirm(`Remove the location for “${team.name}”? It won’t be re-scraped.`)) {
+                    e.preventDefault();
+                  }
+                }}
+              >
+                Remove location
+              </button>
+            </form>
+          )}
           <form action={deleteTeamAction}>
             <input type="hidden" name="teamId" value={team.id} />
             <button

@@ -11,6 +11,7 @@ import {
   gcTeamIdSchema,
   AGE_GROUPS,
   CLASSIFICATIONS,
+  geocodeCity,
 } from "@nbr/core";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { sendEmail, emailLayout, siteUrl } from "./email";
@@ -325,6 +326,25 @@ export async function updateTeamAction(
   const classification =
     rawClass && (CLASSIFICATIONS as readonly string[]).includes(rawClass) ? rawClass : null;
 
+  // Optional admin location edit. When the city field is present and changed, we
+  // lock the location (so the scraper won't overwrite it with a tournament host
+  // city) and re-geocode. A "city" field is only sent by forms that include it.
+  const locationData: Record<string, unknown> = {};
+  if (formData.has("city")) {
+    const existing = await prisma.team.findUnique({
+      where: { id },
+      select: { city: true, state: true },
+    });
+    const city = String(formData.get("city") ?? "").trim() || null;
+    if (city !== (existing?.city ?? null)) {
+      locationData.city = city;
+      locationData.locationLocked = true;
+      const geo = city ? geocodeCity(city, existing?.state ?? "UT") : null;
+      locationData.latitude = geo?.lat ?? null;
+      locationData.longitude = geo?.lng ?? null;
+    }
+  }
+
   try {
     await prisma.team.update({
       where: { id },
@@ -334,6 +354,7 @@ export async function updateTeamAction(
         scrapeEnabled,
         ageGroup: ageGroup as never,
         classification,
+        ...locationData,
         // Reset scrape bookkeeping so a corrected ID gets re-scraped promptly.
         lastScrapedAt: null,
         nextScrapeAfter: null,
@@ -347,6 +368,23 @@ export async function updateTeamAction(
   revalidatePath("/admin/teams");
   revalidatePath("/");
   return { ok: true, message: "Saved." };
+}
+
+/**
+ * Wipe a team's (wrong) location and lock it so the scraper won't repopulate it.
+ * GameChanger sometimes reports a tournament's host city (e.g. RMSB's Northern
+ * Utah setup) instead of the team's home town.
+ */
+export async function clearTeamLocationAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("teamId") ?? "");
+  if (!id) return;
+  await prisma.team.update({
+    where: { id },
+    data: { city: null, zip: null, latitude: null, longitude: null, locationLocked: true },
+  });
+  revalidatePath("/admin/teams");
+  revalidatePath("/");
 }
 
 export async function mergeTeamAction(formData: FormData): Promise<void> {

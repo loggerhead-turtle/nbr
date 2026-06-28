@@ -9,6 +9,7 @@ import { prisma } from "@nbr/db";
 import { launchBrowser, newContext } from "./browser.js";
 import { selectTeamsToScrape } from "./scheduling.js";
 import { scrapeTeam } from "./scrapeTeam.js";
+import { runRecompute } from "../ratings/runRecompute.js";
 import { envBool, envNum, jitterDelay, shuffle } from "../util.js";
 
 export async function runScrape(): Promise<void> {
@@ -38,11 +39,13 @@ export async function runScrape(): Promise<void> {
   let processed = 0;
   let blocked = 0;
   let emptyOrZero = 0;
+  let totalNew = 0;
 
   try {
     for (const team of batch) {
       const result = await scrapeTeam(() => newContext(browser), team, new Date());
       processed += 1;
+      totalNew += result.gamesNew;
       console.log(
         `[scrape] ${team.name} (${team.reason}): ${result.status} ` +
           `found=${result.gamesFound} new=${result.gamesNew} http=${result.httpStatus}`,
@@ -73,5 +76,21 @@ export async function runScrape(): Promise<void> {
     );
   }
 
-  console.log(`[scrape] done. processed=${processed} blocked=${blocked} empty=${emptyOrZero}`);
+  console.log(
+    `[scrape] done. processed=${processed} blocked=${blocked} empty=${emptyOrZero} newGames=${totalNew}`,
+  );
+
+  // Chain a rating recompute so fresh scores rate immediately instead of waiting
+  // for the standalone weekly recompute cron. Gated + best-effort: a recompute
+  // failure is logged but never fails the scrape job.
+  if (totalNew > 0 && envBool("SCRAPE_THEN_RECOMPUTE", true)) {
+    console.log(`[scrape] ${totalNew} new game(s) — running recompute.`);
+    try {
+      await runRecompute();
+    } catch (err) {
+      console.error("[scrape] post-scrape recompute failed:", err);
+    }
+  } else {
+    console.log("[scrape] no new games — skipping recompute.");
+  }
 }
