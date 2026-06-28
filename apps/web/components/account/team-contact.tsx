@@ -7,6 +7,7 @@ import { ReportClaimForm } from "./report-form";
 interface ContactInfo {
   claimed: boolean;
   coachName?: string;
+  nameLength?: number;
   optIn?: boolean;
   signedIn?: boolean;
   canView?: boolean;
@@ -45,7 +46,22 @@ export function TeamContact({ teamId, teamSlug }: { teamId: string; teamSlug: st
     <div className="card p-6">
       <h2 className="text-lg font-bold text-navy-900">Team contact</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Claimed by <strong>{info.coachName || "a verified coach"}</strong>
+        Claimed by{" "}
+        {info.signedIn ? (
+          <strong>{info.coachName || "a verified coach"}</strong>
+        ) : (
+          <span className="inline-flex items-center gap-2">
+            <span
+              aria-hidden
+              className="select-none rounded bg-slate-200 align-middle blur-[5px]"
+            >
+              {"█".repeat(Math.max(6, info.nameLength ?? 10))}
+            </span>
+            <Link href={`/login?next=/teams/${teamSlug}`} className="text-xs font-medium text-navy-700 underline blur-0">
+              sign in to view
+            </Link>
+          </span>
+        )}
       </p>
 
       {info.canView ? (

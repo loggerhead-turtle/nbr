@@ -364,6 +364,19 @@ model Report {
   @@index([status, createdAt])
 }
 
+model ScrimmageRequest {
+  id         String   @id @default(cuid())
+  fromTeamId String
+  toTeamId   String
+  fromUserId String
+  message    String?
+  status     String   @default("PENDING") // PENDING | ACCEPTED | DECLINED
+  createdAt  DateTime @default(now())
+
+  @@index([toTeamId, status])
+  @@index([fromTeamId])
+}
+
 model ScrimmagePref {
   id     String @id @default(cuid())
   teamId String @unique

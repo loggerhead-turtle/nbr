@@ -17,14 +17,17 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
 
   const coachName = [team.claim.user.firstName, team.claim.user.lastName].filter(Boolean).join(" ");
   const user = await getCurrentUser();
+  const signedIn = Boolean(user);
   const canView = Boolean(team.claim.contactOptIn && user);
 
   return NextResponse.json({
     claimed: true,
-    coachName,
+    signedIn,
     optIn: team.claim.contactOptIn,
-    signedIn: Boolean(user),
     canView,
+    // The coach's name is only sent to signed-in users; signed-out clients get a
+    // length hint so the UI can show a blurred placeholder.
+    ...(signedIn ? { coachName } : { nameLength: Math.min(coachName.length, 22) }),
     ...(canView ? { email: team.claim.user.email, phone: team.claim.user.phone } : {}),
   });
 }
