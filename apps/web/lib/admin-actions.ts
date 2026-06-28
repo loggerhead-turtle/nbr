@@ -15,6 +15,7 @@ import {
   normalizeWebsiteUrl,
 } from "@nbr/core";
 import { AGE_OFFSET_KEY, clampAgeStep } from "./age-offset";
+import { LIVE_SEARCH_KEY } from "./site-settings";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew } from "./render-jobs";
 import { sendEmail, emailLayout, siteUrl } from "./email";
@@ -399,6 +400,19 @@ export async function clearTeamLocationAction(formData: FormData): Promise<void>
   });
   revalidatePath("/admin/teams");
   revalidatePath("/");
+}
+
+/** Toggle live ratings search (no Apply button) on the public ratings page. */
+export async function setLiveSearchAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const on = formData.get("liveSearch") === "on";
+  await prisma.appSetting.upsert({
+    where: { key: LIVE_SEARCH_KEY },
+    create: { key: LIVE_SEARCH_KEY, value: on ? "1" : "0" },
+    update: { value: on ? "1" : "0" },
+  });
+  revalidatePath("/");
+  revalidatePath("/admin");
 }
 
 /** Save the admin-tunable cross-age rating offset (points per age year). */

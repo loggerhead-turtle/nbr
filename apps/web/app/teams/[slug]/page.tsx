@@ -66,6 +66,10 @@ export default async function TeamPage({ params }: Params) {
   const rank = team.rating ? await getTeamRank(team.id, team.rating.rating) : null;
   const gcUrl = gameChangerUrl(team.gcTeamId);
   const seasonHistory = await getTeamSeasonHistory(team.predecessorTeamId);
+  const medallionTier = teamMedallion({
+    isGhost: team.isGhost,
+    hasApprovedClaim: team.claim?.status === "APPROVED",
+  });
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -92,14 +96,16 @@ export default async function TeamPage({ params }: Params) {
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-black text-navy-900">
               {team.name}
-              <TeamMedallion
-                tier={teamMedallion({
-                  isGhost: team.isGhost,
-                  hasApprovedClaim: team.claim?.status === "APPROVED",
-                })}
-                className="h-5 w-5 text-xs"
-              />
+              <TeamMedallion tier={medallionTier} className="h-5 w-5 text-xs" />
             </h1>
+            {medallionTier === "gray" && (
+              <Link
+                href={`/claim/${team.slug}`}
+                className="mt-1 inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+              >
+                Are you this team’s coach? Claim this team →
+              </Link>
+            )}
             <p className="mt-1 text-sm text-slate-500">
               {team.city ? `${team.city}, ${team.state}` : team.state} ·{" "}
               {team.classification ? `Varsity · ${team.classification}` : ageGroupLabel(team.ageGroup)}

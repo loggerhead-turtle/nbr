@@ -4,12 +4,14 @@ import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
 import { ProvisionalBadge, GhostBadge } from "@/components/badges";
 import { TeamMedallion } from "@/components/team-medallion";
 import { ScrimmageFinderCard } from "@/components/scrimmage-finder-card";
+import { RatingsFilterBar } from "@/components/ratings-filter-bar";
 import { teamMedallion } from "@/lib/medallion";
+import { getLiveSearchEnabled } from "@/lib/site-settings";
 import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
 export const revalidate = 3600; // ISR: static-fast, refreshed hourly
 
-const DEFAULT_DIVISION = "14U";
+const DEFAULT_DIVISION = "12U";
 
 /**
  * Resolve the single division to show. Accepts a `division` token ("14U" for an
@@ -46,8 +48,9 @@ export default async function HomePage({
   const ageGroup = division.kind === "age" ? division.value : undefined;
   const classification = division.kind === "class" ? division.value : undefined;
   const includeProvisional = sp.prov === "1";
-  const sort = (sp.sort as "rating" | "name" | "games") || "rating";
+  const sort = (sp.sort as "rating" | "name" | "games") || "name";
   const page = Number(sp.page) || 1;
+  const liveSearch = await getLiveSearchEnabled();
 
   const { rows, total } = await getRatings({
     search,
@@ -68,11 +71,12 @@ export default async function HomePage({
       </section>
 
       <section className="mx-auto max-w-6xl px-4 py-8">
-        <FilterBar
+        <RatingsFilterBar
           search={search}
           division={division.token}
           includeProvisional={includeProvisional}
           sort={sort}
+          liveSearch={liveSearch}
         />
 
         <p className="mb-3 mt-6 text-sm text-slate-500">
@@ -99,6 +103,10 @@ export default async function HomePage({
               <tbody className="divide-y divide-slate-100">
                 {rows.map((r, i) => {
                   const rank = !includeProvisional ? (page - 1) * 50 + i + 1 : null;
+                  const tier = teamMedallion({
+                    isGhost: r.isGhost,
+                    hasApprovedClaim: r.hasApprovedClaim,
+                  });
                   return (
                     <tr key={r.teamId} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-semibold text-slate-400">
@@ -114,12 +122,15 @@ export default async function HomePage({
                           >
                             {r.name}
                           </Link>
-                          <TeamMedallion
-                            tier={teamMedallion({
-                              isGhost: r.isGhost,
-                              hasApprovedClaim: r.hasApprovedClaim,
-                            })}
-                          />
+                          <TeamMedallion tier={tier} />
+                          {tier === "gray" && (
+                            <Link
+                              href={`/claim/${r.slug}`}
+                              className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                            >
+                              Claim team
+                            </Link>
+                          )}
                         </span>
                         <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                           {r.city ? <span>{r.city}, {r.state}</span> : <span>{r.state}</span>}
@@ -180,73 +191,6 @@ function Hero() {
         </div>
       </div>
     </section>
-  );
-}
-
-function FilterBar({
-  search,
-  division,
-  includeProvisional,
-  sort,
-}: {
-  search?: string;
-  division: string;
-  includeProvisional: boolean;
-  sort: string;
-}) {
-  return (
-    <form method="get" className="card flex flex-wrap items-end gap-3 p-4">
-      <div className="min-w-[200px] flex-1">
-        <label className="label" htmlFor="q">
-          Search teams
-        </label>
-        <input
-          id="q"
-          name="q"
-          defaultValue={search}
-          placeholder="Team name…"
-          className="input"
-        />
-      </div>
-      <div>
-        <label className="label" htmlFor="division">
-          Division
-        </label>
-        <select id="division" name="division" defaultValue={division} className="input">
-          <optgroup label="Youth (age group)">
-            {AGE_GROUPS.map((a) => (
-              <option key={a} value={a}>
-                {ageGroupLabel(a)}
-              </option>
-            ))}
-          </optgroup>
-          <optgroup label="High school (varsity)">
-            {CLASSIFICATIONS.map((c) => (
-              <option key={c} value={`v:${c}`}>
-                Varsity {c}
-              </option>
-            ))}
-          </optgroup>
-        </select>
-      </div>
-      <div>
-        <label className="label" htmlFor="sort">
-          Sort by
-        </label>
-        <select id="sort" name="sort" defaultValue={sort} className="input">
-          <option value="rating">Rating</option>
-          <option value="name">Name</option>
-          <option value="games">Games played</option>
-        </select>
-      </div>
-      <label className="flex items-center gap-2 pb-2 text-sm text-slate-600">
-        <input type="checkbox" name="prov" value="1" defaultChecked={includeProvisional} />
-        Include provisional
-      </label>
-      <button type="submit" className="btn-primary">
-        Apply
-      </button>
-    </form>
   );
 }
 

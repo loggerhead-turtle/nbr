@@ -22,7 +22,7 @@ export function ScrimmageSettings({
     <form action={action} className="mt-3 space-y-3 rounded-lg bg-slate-50 p-3">
       <input type="hidden" name="teamId" value={teamId} />
       <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
-        <input type="checkbox" name="seekingScrimmage" defaultChecked={seeking} />
+        <input type="checkbox" name="seekingScrimmage" defaultChecked={seeking} className="h-4 w-4 shrink-0" />
         Looking for scrimmages
       </label>
       <div className="flex flex-wrap gap-3">
