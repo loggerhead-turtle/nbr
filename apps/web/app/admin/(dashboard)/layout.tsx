@@ -3,11 +3,15 @@ import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth";
 import { logoutAction } from "@/lib/admin-actions";
 import { countDuplicateCandidates } from "@/lib/duplicates";
+import { countGhostTeams } from "@nbr/db";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   if (!(await isAdmin())) redirect("/admin/login");
 
-  const dupCount = await countDuplicateCandidates();
+  const [dupCount, ghostCount] = await Promise.all([
+    countDuplicateCandidates(),
+    countGhostTeams().catch(() => 0),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -42,6 +46,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             {dupCount > 0 && (
               <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-xs font-bold text-white">
                 {dupCount}
+              </span>
+            )}
+          </Link>
+          <Link
+            href="/admin/ghosts"
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Ghosts
+            {ghostCount > 0 && (
+              <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-slate-500 px-1.5 py-0.5 text-xs font-bold text-white">
+                {ghostCount}
               </span>
             )}
           </Link>
