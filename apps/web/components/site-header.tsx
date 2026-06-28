@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UnreadBadge } from "@/components/unread-badge";
 
 const NAV = [
   { href: "/", label: "Ratings" },
@@ -30,9 +31,10 @@ export function SiteHeader() {
             <Link
               key={item.href}
               href={item.href}
-              className="rounded-md px-3 py-2 text-navy-100 transition hover:bg-white/10 hover:text-white"
+              className="flex items-center rounded-md px-3 py-2 text-navy-100 transition hover:bg-white/10 hover:text-white"
             >
               {item.label}
+              {item.href === "/account" && <UnreadBadge />}
             </Link>
           ))}
         </nav>
