@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@nbr/db";
 import { createTeamSchema, teamSlug } from "@nbr/core";
 import { findPromotableTeam } from "./teams";
+import { triggerScrapeTeam } from "./render-jobs";
 import { getCurrentSeasonYear } from "./season";
 import type { ActionState } from "./admin-actions";
 
@@ -69,6 +70,7 @@ export async function submitTeamAction(
         consecutiveFailures: 0,
       },
     });
+    if (data.gcTeamId) await triggerScrapeTeam(data.gcTeamId);
     revalidatePath("/");
     return {
       ok: true,
@@ -92,6 +94,7 @@ export async function submitTeamAction(
     },
   });
 
+  if (data.gcTeamId) await triggerScrapeTeam(data.gcTeamId);
   revalidatePath("/");
   return {
     ok: true,

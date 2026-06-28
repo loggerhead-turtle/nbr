@@ -23,6 +23,14 @@ envVarGroups:
       # Cookie-signing secret — let Render generate a strong value.
       - key: ADMIN_SESSION_SECRET
         generateValue: true
+      # On-add instant scrape: when a team is added, the web app calls Render's
+      # Job API to scrape just that team and recompute. Paste an API key and the
+      # nbr-scraper service ID (it has Chromium). Leave blank to fall back to the
+      # scheduled scraper picking the team up on its next run.
+      - key: RENDER_API_KEY
+        sync: false
+      - key: RENDER_WORKER_SERVICE_ID
+        sync: false
       # Scraper controls. Leave disabled until you're ready.
       - key: SCRAPER_ENABLED
         value: "false"

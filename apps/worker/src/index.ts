@@ -7,6 +7,7 @@
  */
 import { prisma } from "@nbr/db";
 import { runScrape } from "./scraper/runScrape.js";
+import { runScrapeOne, runScrapeNew } from "./scraper/runScrapeOne.js";
 import { runMaxPreps } from "./scraper/runMaxPreps.js";
 import { runGeocode } from "./scraper/runGeocode.js";
 import { runRecompute } from "./ratings/runRecompute.js";
@@ -18,6 +19,12 @@ async function main() {
   switch (command) {
     case "scrape":
       await runScrape();
+      break;
+    case "scrape-one":
+      await runScrapeOne(process.argv[3]);
+      break;
+    case "scrape-new":
+      await runScrapeNew();
       break;
     case "maxpreps":
       await runMaxPreps();
@@ -32,7 +39,9 @@ async function main() {
       await runBacktest();
       break;
     default:
-      console.error("Usage: node src/index.ts <scrape|maxpreps|geocode|recompute|backtest>");
+      console.error(
+        "Usage: node src/index.ts <scrape|scrape-one <gcTeamId>|scrape-new|maxpreps|geocode|recompute|backtest>",
+      );
       process.exitCode = 1;
   }
 }
