@@ -9,6 +9,7 @@
     "geocode": "tsx src/index.ts geocode",
     "recompute": "tsx src/index.ts recompute",
     "backtest": "tsx src/index.ts backtest",
+    "age-diagnostics": "tsx src/index.ts age-diagnostics",
     "postinstall": "playwright install chromium || true",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",

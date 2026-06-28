@@ -42,4 +42,26 @@ describe("backtest", () => {
     expect(bt.logLoss).toBeLessThan(coin.logLoss);
     expect(bt.accuracy).toBeGreaterThan(0.5);
   });
+
+  it("defaults to a single 'all' segment with no age map", () => {
+    expect(scores.every((s) => s.segment === "all")).toBe(true);
+  });
+
+  it("adds bt-age-v1 and same/cross-age segments when ages are supplied", () => {
+    // A>B>C are U12, D>E are U10; cross-age games connect them.
+    const teamAge = new Map<string, string>([
+      ["A", "U12"], ["B", "U12"], ["C", "U12"], ["D", "U10"], ["E", "U10"],
+    ]);
+    const withAge = backtest(buildSeason(), { testWindowDays: 14, teamAge });
+    expect(withAge.some((s) => s.model === "bt-age-v1")).toBe(true);
+    const segs = new Set(withAge.map((s) => s.segment));
+    expect(segs.has("cross-age")).toBe(true);
+    expect(segs.has("same-age")).toBe(true);
+    // Cross-age rows only count games between different age groups.
+    const crossN = withAge.find((s) => s.segment === "cross-age")!.n;
+    const sameN = withAge.find((s) => s.segment === "same-age")!.n;
+    const allN = withAge.find((s) => s.segment === "all")!.n;
+    expect(crossN + sameN).toBe(allN);
+    expect(crossN).toBeGreaterThan(0);
+  });
 });

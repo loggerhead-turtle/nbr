@@ -5,9 +5,28 @@
  */
 import { prisma } from "@nbr/db";
 import { computeRatings, computeRatingsBT, EngineGame, EngineOutput } from "@nbr/ratings";
+import { DEFAULT_RATING_ALGORITHM, isRatingAlgorithm } from "@nbr/core";
+
+const RATING_ALGORITHM_KEY = "ratingAlgorithm";
+
+/**
+ * Which model to run, in priority order:
+ *   1. the admin's choice (AppSetting, set from the admin Settings page)
+ *   2. the RATING_ALGORITHM env var (override for ad-hoc/manual runs)
+ *   3. the default (DEFAULT_RATING_ALGORITHM)
+ */
+async function resolveAlgorithm(): Promise<string> {
+  const fromDb = await prisma.appSetting
+    .findUnique({ where: { key: RATING_ALGORITHM_KEY } })
+    .catch(() => null);
+  if (fromDb && isRatingAlgorithm(fromDb.value)) return fromDb.value;
+  const fromEnv = process.env.RATING_ALGORITHM;
+  if (fromEnv && isRatingAlgorithm(fromEnv)) return fromEnv;
+  return DEFAULT_RATING_ALGORITHM;
+}
 
 export async function runRecompute(): Promise<void> {
-  const algorithm = process.env.RATING_ALGORITHM || "bt-mov-v1";
+  const algorithm = await resolveAlgorithm();
   const run = await prisma.ratingRun.create({
     data: { status: "RUNNING", algorithmVersion: algorithm },
   });
@@ -46,17 +65,21 @@ export async function runRecompute(): Promise<void> {
     } else {
       // Bradley-Terry: carry predecessor ratings forward as priors, set per-level
       // home advantage (youth vs high school), weaken the anchor for carried teams.
+      // `bt-age-v1` additionally fits an age-group baseline so 8U and 16U land on
+      // one absolute scale (see packages/ratings/src/bradleyTerry.ts).
       const teams = await prisma.team.findMany({
-        select: { id: true, classification: true, predecessorTeamId: true },
+        select: { id: true, classification: true, predecessorTeamId: true, ageGroup: true },
       });
       const ratings = await prisma.rating.findMany({ select: { teamId: true, rating: true } });
       const ratingByTeam = new Map(ratings.map((r) => [r.teamId, r.rating] as const));
 
       const priorRating = new Map<string, number>();
       const level = new Map<string, "youth" | "hs">();
+      const ageGroup = new Map<string, string>();
       const seasonBoundaryTeams = new Set<string>();
       for (const t of teams) {
         level.set(t.id, t.classification ? "hs" : "youth");
+        if (t.ageGroup) ageGroup.set(t.id, t.ageGroup);
         if (t.predecessorTeamId) {
           const pred = ratingByTeam.get(t.predecessorTeamId);
           if (pred != null) {
@@ -65,12 +88,23 @@ export async function runRecompute(): Promise<void> {
           }
         }
       }
-      output = computeRatingsBT(engineGames, { priorRating, level, seasonBoundaryTeams });
+      output = computeRatingsBT(engineGames, {
+        priorRating,
+        level,
+        seasonBoundaryTeams,
+        ...(algorithm === "bt-age-v1" ? { ageGroup } : {}),
+      });
     }
     console.log(
       `[recompute] ${output.gamesProcessed} games, ${output.teams.size} teams, ` +
         `${output.periods} periods, ${output.components} components`,
     );
+    if (output.ageCurve) {
+      console.log("[recompute] age-group baseline curve (display scale):");
+      for (const c of output.ageCurve) {
+        console.log(`  ${c.ageGroup.padEnd(5)} ${c.baseline.toFixed(0)}  (${c.bridgeGames} bridge games)`);
+      }
+    }
 
     // Persist results. Upsert the current Rating row, append a history snapshot.
     let teamsAffected = 0;
