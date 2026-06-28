@@ -434,8 +434,31 @@ model ScrimmageRequest {
   status     String   @default("PENDING") // PENDING | ACCEPTED | DECLINED
   createdAt  DateTime @default(now())
 
+  // Thread read state per side (from = initiator, to = recipient coach).
+  fromReadAt DateTime?
+  toReadAt   DateTime?
+  // Per-thread contact sharing each side opts into (revocable).
+  fromShareEmail Boolean @default(false)
+  fromSharePhone Boolean @default(false)
+  toShareEmail   Boolean @default(false)
+  toSharePhone   Boolean @default(false)
+
+  messages ScrimmageMessage[]
+
   @@index([toTeamId, status])
   @@index([fromTeamId])
+}
+
+// A message in a scrimmage request's conversation thread.
+model ScrimmageMessage {
+  id           String           @id @default(cuid())
+  requestId    String
+  request      ScrimmageRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  senderUserId String
+  body         String
+  createdAt    DateTime         @default(now())
+
+  @@index([requestId, createdAt])
 }
 
 model ScrimmagePref {

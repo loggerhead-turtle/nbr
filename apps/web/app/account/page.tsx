@@ -11,6 +11,7 @@ import { TeamWebsiteForm } from "@/components/account/team-website-form";
 import { TdRequestForm } from "@/components/account/td-request";
 import { RolloverPrompt } from "@/components/account/rollover-prompt";
 import { getCurrentSeasonYear } from "@/lib/season";
+import { getUserThreads } from "@/lib/queries";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,8 @@ export default async function AccountPage() {
       take: 25,
     }),
   ]);
+
+  const threads = await getUserThreads(user.id);
 
   // Resolve the other teams referenced by requests.
   const otherIds = [
@@ -139,6 +142,38 @@ export default async function AccountPage() {
                 </li>
               );
             })}
+          </ul>
+        </section>
+      )}
+
+      {/* Messages */}
+      {threads.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-bold text-navy-900">Messages</h2>
+          <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200">
+            {threads.map((t) => (
+              <li key={t.id}>
+                <Link
+                  href={`/messages/${t.id}`}
+                  className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50"
+                >
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2">
+                      <span className="font-medium text-navy-900">{t.otherTeam}</span>
+                      {t.unread > 0 && (
+                        <span className="inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-red-600 px-1 py-0.5 text-[10px] font-bold leading-none text-white">
+                          {t.unread}
+                        </span>
+                      )}
+                    </span>
+                    <span className="block truncate text-xs text-slate-500">
+                      {t.myTeam} · {t.lastBody || "No messages yet"}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs text-slate-400">{formatDate(t.lastAt)}</span>
+                </Link>
+              </li>
+            ))}
           </ul>
         </section>
       )}

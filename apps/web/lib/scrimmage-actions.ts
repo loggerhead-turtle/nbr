@@ -66,8 +66,15 @@ export async function sendScrimmageRequestAction(formData: FormData): Promise<Se
   });
   if (!existing) {
     existing = await prisma.scrimmageRequest.create({
-      data: { fromTeamId, toTeamId, fromUserId: user.id, message },
+      // The initiator has read their own opener; the recipient sees it as unread.
+      data: { fromTeamId, toTeamId, fromUserId: user.id, message, fromReadAt: new Date() },
     });
+    // Seed the conversation thread with the opening message.
+    if (message) {
+      await prisma.scrimmageMessage.create({
+        data: { requestId: existing.id, senderUserId: user.id, body: message },
+      });
+    }
 
     // Notify the recipient team's coach — only if the team is actually claimed.
     // Otherwise the request waits as PENDING and surfaces once a coach claims it.
