@@ -3,6 +3,7 @@ import Link from "next/link";
 const NAV = [
   { href: "/", label: "Ratings" },
   { href: "/pools", label: "Pool Generator" },
+  { href: "/scrimmages", label: "Scrimmages" },
   { href: "/submit-team", label: "Add Team" },
   { href: "/about", label: "About" },
   { href: "/account", label: "Coaches" },

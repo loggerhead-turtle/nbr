@@ -8,6 +8,7 @@
 import { prisma } from "@nbr/db";
 import { runScrape } from "./scraper/runScrape.js";
 import { runMaxPreps } from "./scraper/runMaxPreps.js";
+import { runGeocode } from "./scraper/runGeocode.js";
 import { runRecompute } from "./ratings/runRecompute.js";
 import { runBacktest } from "./ratings/runBacktest.js";
 
@@ -21,6 +22,9 @@ async function main() {
     case "maxpreps":
       await runMaxPreps();
       break;
+    case "geocode":
+      await runGeocode();
+      break;
     case "recompute":
       await runRecompute();
       break;
@@ -28,7 +32,7 @@ async function main() {
       await runBacktest();
       break;
     default:
-      console.error("Usage: node src/index.ts <scrape|maxpreps|recompute|backtest>");
+      console.error("Usage: node src/index.ts <scrape|maxpreps|geocode|recompute|backtest>");
       process.exitCode = 1;
   }
 }

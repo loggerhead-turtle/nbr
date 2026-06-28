@@ -97,6 +97,10 @@ model Team {
   zip       String?
   latitude  Float?
   longitude Float?
+  // Set when an admin has manually edited or removed the location. The scraper
+  // then leaves city/coords alone (GameChanger sometimes reports a tournament's
+  // host city instead of the team's home), and geocoding is skipped.
+  locationLocked Boolean @default(false)
 
   isActive Boolean @default(true)
   // Ghost teams are opponents auto-created from scraped games before an admin

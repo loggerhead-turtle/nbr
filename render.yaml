@@ -81,3 +81,19 @@ services:
       - key: NODE_VERSION
         value: "22"
       - fromGroup: nbr
+
+  # One-time / occasional geocode backfill: fills team latitude/longitude from
+  # the bundled city centroids so the scrimmage finder can match by distance.
+  # Idempotent (only fills missing coords) — run manually via Trigger Run; the
+  # schedule is just a far-future placeholder.
+  - type: cron
+    name: nbr-geocode
+    runtime: node
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm --filter @nbr/db generate
+    startCommand: pnpm --filter @nbr/worker geocode
+    schedule: "0 9 1 1 *" # 09:00 on Jan 1 (placeholder; trigger manually)
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - fromGroup: nbr
