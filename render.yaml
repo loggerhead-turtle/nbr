@@ -14,7 +14,9 @@ envVarGroups:
         sync: false
       - key: DIRECT_URL
         sync: false
-      # Final public URL (drives SEO canonical links + sitemap).
+      # Final public URL (drives SEO canonical links + sitemap). Production:
+      # https://nbrball.com (the primary; www.nbrball.com redirects to it). No
+      # trailing slash.
       - key: NEXT_PUBLIC_SITE_URL
         sync: false
       # Admin login password — paste on apply.
