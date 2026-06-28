@@ -73,9 +73,16 @@ maximize  Σ_g w_g · logloss(y_g, σ(z_g))
   carry-over behaviour.
 - `s` (`ageStepPrior`) is the expected per-year developmental gain (θ units). The
   step prior simultaneously **smooths** the curve, encodes the **expected
-  increase**, and **fills ages with no bridges** (their step defaults to `s`).
+  increase**, and **fills ages with no bridges** (their step defaults to `s`). It
+  is driven by the admin **points-per-age-year** setting (`ageOffsetStep`,
+  default **200 pts/year**); the real 8U→16U gap is large, so the prior is strong
+  enough to dominate the within-age spread (a weak prior leaves a dominant 9U
+  outranking an average 14U). `ageCurveLambda` is high so sparse, positively-
+  selected bridge games can't compress the curve away from the prior.
 - After each sweep the curve is projected to be **non-decreasing**
   (`enforceMonotone`) — see selection bias below.
+- For display the whole curve is uniformly shifted so **14U ≈ 1500** (younger
+  below, older above) — a pure relabel that changes no prediction or ranking.
 
 Solved with the same damped coordinate-Newton sweeps as `bt-mov-v1`; β is fit in
 the loop exactly like the per-level home advantage already is. When no age map is
@@ -133,10 +140,19 @@ All of this reuses the existing backtest harness
   table under `ratingAlgorithm` and takes effect on the next recompute.
 - The recompute resolves the model in priority order: **admin setting → the
   `RATING_ALGORITHM` env var (ad-hoc override) → the default.** The recompute log
-  prints the chosen model plus the fitted age curve and per-age bridge counts.
-- Tunables (engine options, all with sensible defaults): `ageStepPrior`,
-  `ageCurveLambda`, `ageAnchorLambda`, `enforceMonotone`. Calibrate against the
-  cross-age backtest.
+  prints the chosen model, the age-curve prior (pts/age-year), and the fitted age
+  curve with per-age bridge counts.
+- The **strength of the age separation** is the admin **points-per-age-year**
+  setting (Admin → Age offset; `ageOffsetStep`, default 200). The same knob drives
+  this model's prior and the legacy admin cross-age preview. Raise it for a wider
+  spread between ages, lower it for a gentler one; it takes effect on the next
+  recompute.
+- Other tunables (engine options, sensible defaults): `ageCurveLambda`,
+  `ageAnchorLambda`, `enforceMonotone`. Calibrate against the cross-age backtest.
+- **Note:** with `bt-age-v1` active the age step is already baked into stored
+  ratings, so the legacy *Age offset* admin preview (which adds the same step on
+  top of stored ratings) would double-count — read it only when a
+  non-age-normalized model is active.
 - No schema change is required: the setting reuses the existing `AppSetting`
   table, and ratings stay in `Rating.rating` on the same display scale.
 
