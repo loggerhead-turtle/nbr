@@ -106,6 +106,14 @@ model Team {
   // the real name/city/age group from the team's page on its first run.
   needsEnrichment Boolean @default(false)
 
+  // Cross-season succession: most clubs register a NEW GameChanger team each
+  // season (13U → 14U). The new season-team points to the prior one so its
+  // rating/record carry forward; the old team is archived (isActive=false).
+  seasonYear        Int?
+  predecessorTeamId String? @unique
+  predecessor       Team?   @relation("TeamSuccession", fields: [predecessorTeamId], references: [id], onDelete: SetNull)
+  successor         Team?   @relation("TeamSuccession")
+
   // Scraper controls.
   scrapeEnabled       Boolean   @default(true)
   lastScrapedAt       DateTime?
@@ -258,6 +266,13 @@ model TournamentPool {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// Simple key/value app settings (e.g. currentSeasonYear for rollover).
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 // Admin "don't merge" decisions so dismissed duplicate pairs don't resurface.

@@ -128,7 +128,15 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
   // values already set, and never infer age from opponents.
   const data: Record<string, unknown> = {};
   if (!t.city && header.city) data.city = header.city;
-  if (!t.ageGroup && header.ageGroup) data.ageGroup = header.ageGroup as AgeGroup;
+  // Age comes from the team's OWN page. Set it if missing, and ALSO advance it
+  // when the team has aged up (header age is higher than what we have) — never
+  // lower it (a decrease is almost certainly a misparse, and protects admin edits).
+  if (header.ageGroup) {
+    const ageNum = (a: string | null) => (a ? Number(a.replace(/^U/i, "")) : 0);
+    if (!t.ageGroup || ageNum(header.ageGroup) > ageNum(t.ageGroup)) {
+      data.ageGroup = header.ageGroup as AgeGroup;
+    }
+  }
 
   // Full enrichment of a quick-added stub: set the real name + slug, clear flag.
   const doFullEnrich = t.needsEnrichment && !!header.name;

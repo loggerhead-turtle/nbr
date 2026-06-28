@@ -181,7 +181,7 @@ function FilterBar({
           <option value="">All</option>
           {AGE_GROUPS.map((a) => (
             <option key={a} value={a}>
-              {a.replace("U", "") === "OPEN" ? "Open" : a.replace("U", "") + "U"}
+              {ageGroupLabel(a)}
             </option>
           ))}
         </select>

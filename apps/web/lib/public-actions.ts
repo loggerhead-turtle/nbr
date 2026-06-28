@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@nbr/db";
 import { createTeamSchema, teamSlug } from "@nbr/core";
 import { findPromotableTeam } from "./teams";
+import { getCurrentSeasonYear } from "./season";
 import type { ActionState } from "./admin-actions";
 
 async function uniqueSlug(base: string): Promise<string> {
@@ -86,6 +87,7 @@ export async function submitTeamAction(
       city: data.city ?? null,
       state: data.state,
       zip: data.zip ?? null,
+      seasonYear: (await getCurrentSeasonYear()) ?? undefined,
       rating: { create: {} },
     },
   });

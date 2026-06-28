@@ -8,6 +8,8 @@ import { respondScrimmageRequestAction } from "@/lib/scrimmage-actions";
 import { respondTournamentInviteAction } from "@/lib/tournament-actions";
 import { ScrimmageSettings } from "@/components/account/scrimmage-settings";
 import { TdRequestForm } from "@/components/account/td-request";
+import { RolloverPrompt } from "@/components/account/rollover-prompt";
+import { getCurrentSeasonYear } from "@/lib/season";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -17,19 +19,33 @@ export default async function AccountPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/account");
 
-  const [account, claims] = await Promise.all([
+  const [account, claims, currentSeasonYear] = await Promise.all([
     prisma.user.findUnique({
       where: { id: user.id },
       select: { tdStatus: true, tdTournamentName: true, tdOrg: true, tdWebsite: true },
     }),
     prisma.claim.findMany({
       where: { userId: user.id },
-      include: { team: { include: { scrimmagePref: true } } },
+      include: { team: { include: { scrimmagePref: true, successor: true } } },
       orderBy: { createdAt: "desc" },
     }),
+    getCurrentSeasonYear(),
   ]);
   const myTeamIds = claims.map((c) => c.team.id);
   const myTeamName = new Map(claims.map((c) => [c.team.id, c.team.name] as const));
+
+  // Rollover: claimed, still-active teams from a prior season with no successor.
+  const rolloverTeams =
+    currentSeasonYear == null
+      ? []
+      : claims
+          .filter(
+            (c) =>
+              c.team.isActive &&
+              !c.team.successor &&
+              (c.team.seasonYear == null || c.team.seasonYear < currentSeasonYear),
+          )
+          .map((c) => ({ id: c.team.id, name: c.team.name }));
 
   // Tournament invites to the user's claimed teams.
   const tInvites = await prisma.tournamentInvite.findMany({
@@ -72,6 +88,13 @@ export default async function AccountPage() {
       <p className="mt-1 text-sm text-slate-500">
         {user.firstName} {user.lastName} · {user.email}
       </p>
+
+      {/* Season rollover — the first thing a coach sees when a new season opens */}
+      {rolloverTeams.length > 0 && currentSeasonYear != null && (
+        <div className="mt-6">
+          <RolloverPrompt teams={rolloverTeams} seasonYear={currentSeasonYear} />
+        </div>
+      )}
 
       {/* Incoming scrimmage requests */}
       {incoming.length > 0 && (

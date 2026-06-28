@@ -2,6 +2,8 @@ import Link from "next/link";
 import { prisma } from "@nbr/db";
 import { formatDate } from "@/lib/format";
 import { setTdStatusAction } from "@/lib/admin-actions";
+import { advanceSeasonAction } from "@/lib/season-actions";
+import { getCurrentSeasonYear } from "@/lib/season";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +25,8 @@ export default async function AdminDashboard() {
     orderBy: { createdAt: "desc" },
     take: 10,
   });
+
+  const currentSeasonYear = await getCurrentSeasonYear();
 
   const tdRequests = await prisma.user.findMany({
     where: { tdStatus: "REQUESTED" },
@@ -61,6 +65,27 @@ export default async function AdminDashboard() {
         <Link href="/admin/games/new" className="btn-ghost">
           + Add game manually
         </Link>
+      </div>
+
+      <div className="card mt-6 p-5">
+        <h2 className="font-bold text-navy-900">Season rollover</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Current season: <strong>{currentSeasonYear ?? "not set"}</strong>. Advancing the season
+          shows claimed-team coaches a prompt at login to add their new-season GameChanger ID
+          (carrying their rating forward).
+        </p>
+        <form action={advanceSeasonAction} className="mt-3 flex items-end gap-2">
+          <div>
+            <label className="label">Set season year</label>
+            <input
+              name="year"
+              type="number"
+              defaultValue={(currentSeasonYear ?? new Date().getFullYear()) + 1}
+              className="input w-32"
+            />
+          </div>
+          <button className="btn-primary">Advance season</button>
+        </form>
       </div>
 
       {openReports.length > 0 && (

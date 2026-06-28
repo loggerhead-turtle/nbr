@@ -14,6 +14,7 @@ import {
 } from "@nbr/core";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { sendEmail, emailLayout, siteUrl } from "./email";
+import { getCurrentSeasonYear } from "./season";
 import {
   ADMIN_COOKIE,
   adminCookieOptions,
@@ -65,6 +66,7 @@ export async function createTeamAction(
 
   const nameInput = String(formData.get("name") ?? "").trim();
   const gcInput = String(formData.get("gcTeamId") ?? "").trim();
+  const seasonYear = (await getCurrentSeasonYear()) ?? undefined;
 
   // Name is optional on the admin side. With no name but a GameChanger ID, create
   // a stub the scraper will enrich (name/city/age filled in on first scrape).
@@ -86,6 +88,7 @@ export async function createTeamAction(
         state: "UT",
         needsEnrichment: true,
         scrapeEnabled: true,
+        seasonYear,
         rating: { create: {} },
       },
     });
@@ -160,6 +163,7 @@ export async function createTeamAction(
       state: data.state,
       zip: data.zip ?? null,
       isGhost: false,
+      seasonYear,
       // Create an initial (provisional) rating row so the team is queryable.
       rating: { create: {} },
     },
@@ -183,6 +187,7 @@ export async function quickAddTeamsAction(
   let added = 0;
   let skipped = 0;
   const invalid: string[] = [];
+  const seasonYear = (await getCurrentSeasonYear()) ?? undefined;
 
   for (const token of tokens) {
     const parsed = gcTeamIdSchema.safeParse(token);
@@ -205,6 +210,7 @@ export async function quickAddTeamsAction(
         state: "UT",
         needsEnrichment: true,
         scrapeEnabled: true,
+        seasonYear,
         rating: { create: {} },
       },
     });

@@ -4,6 +4,7 @@ import { useActionState } from "react";
 import { submitTeamAction } from "@/lib/public-actions";
 import type { ActionState } from "@/lib/admin-actions";
 import { AGE_GROUPS } from "@nbr/core";
+import { ageGroupLabel } from "@/lib/format";
 
 const initial: ActionState = {};
 
@@ -48,7 +49,7 @@ export function SubmitTeamForm() {
             <option value="">—</option>
             {AGE_GROUPS.map((a) => (
               <option key={a} value={a}>
-                {a}
+                {ageGroupLabel(a)}
               </option>
             ))}
           </select>

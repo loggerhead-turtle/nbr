@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { updateTeamAction, deleteTeamAction, type ActionState } from "@/lib/admin-actions";
 import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
+import { ageGroupLabel } from "@/lib/format";
 
 const initial: ActionState = {};
 
@@ -50,7 +51,7 @@ export function TeamRow({ team }: { team: TeamRowData }) {
             <option value="">—</option>
             {AGE_GROUPS.map((a) => (
               <option key={a} value={a}>
-                {a}
+                {ageGroupLabel(a)}
               </option>
             ))}
           </select>

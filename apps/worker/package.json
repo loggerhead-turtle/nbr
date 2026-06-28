@@ -7,6 +7,7 @@
     "scrape": "tsx src/index.ts scrape",
     "maxpreps": "tsx src/index.ts maxpreps",
     "recompute": "tsx src/index.ts recompute",
+    "backtest": "tsx src/index.ts backtest",
     "postinstall": "playwright install chromium || true",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",

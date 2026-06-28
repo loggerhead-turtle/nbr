@@ -9,6 +9,7 @@ import { prisma } from "@nbr/db";
 import { runScrape } from "./scraper/runScrape.js";
 import { runMaxPreps } from "./scraper/runMaxPreps.js";
 import { runRecompute } from "./ratings/runRecompute.js";
+import { runBacktest } from "./ratings/runBacktest.js";
 
 async function main() {
   const command = process.argv[2];
@@ -23,8 +24,11 @@ async function main() {
     case "recompute":
       await runRecompute();
       break;
+    case "backtest":
+      await runBacktest();
+      break;
     default:
-      console.error("Usage: node src/index.ts <scrape|maxpreps|recompute>");
+      console.error("Usage: node src/index.ts <scrape|maxpreps|recompute|backtest>");
       process.exitCode = 1;
   }
 }

@@ -4,13 +4,14 @@
  * a failure leaves the last-good Rating table intact.
  */
 import { prisma } from "@nbr/db";
-import { computeRatings, EngineGame } from "@nbr/ratings";
+import { computeRatings, computeRatingsBT, EngineGame, EngineOutput } from "@nbr/ratings";
 
 export async function runRecompute(): Promise<void> {
+  const algorithm = process.env.RATING_ALGORITHM || "bt-mov-v1";
   const run = await prisma.ratingRun.create({
-    data: { status: "RUNNING", algorithmVersion: "glicko2-v1" },
+    data: { status: "RUNNING", algorithmVersion: algorithm },
   });
-  console.log(`[recompute] started run ${run.id}`);
+  console.log(`[recompute] started run ${run.id} (algorithm=${algorithm})`);
 
   try {
     const games = await prisma.game.findMany({
@@ -39,7 +40,33 @@ export async function runRecompute(): Promise<void> {
       neutralSite: g.neutralSite,
     }));
 
-    const output = computeRatings(engineGames);
+    let output: EngineOutput;
+    if (algorithm === "glicko2-v1") {
+      output = computeRatings(engineGames);
+    } else {
+      // Bradley-Terry: carry predecessor ratings forward as priors, set per-level
+      // home advantage (youth vs high school), weaken the anchor for carried teams.
+      const teams = await prisma.team.findMany({
+        select: { id: true, classification: true, predecessorTeamId: true },
+      });
+      const ratings = await prisma.rating.findMany({ select: { teamId: true, rating: true } });
+      const ratingByTeam = new Map(ratings.map((r) => [r.teamId, r.rating] as const));
+
+      const priorRating = new Map<string, number>();
+      const level = new Map<string, "youth" | "hs">();
+      const seasonBoundaryTeams = new Set<string>();
+      for (const t of teams) {
+        level.set(t.id, t.classification ? "hs" : "youth");
+        if (t.predecessorTeamId) {
+          const pred = ratingByTeam.get(t.predecessorTeamId);
+          if (pred != null) {
+            priorRating.set(t.id, pred);
+            seasonBoundaryTeams.add(t.id);
+          }
+        }
+      }
+      output = computeRatingsBT(engineGames, { priorRating, level, seasonBoundaryTeams });
+    }
     console.log(
       `[recompute] ${output.gamesProcessed} games, ${output.teams.size} teams, ` +
         `${output.periods} periods, ${output.components} components`,
