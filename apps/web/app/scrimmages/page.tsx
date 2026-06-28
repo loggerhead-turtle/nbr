@@ -3,6 +3,7 @@ import { prisma, Prisma } from "@nbr/db";
 import { haversineMiles, effectiveDistanceMi } from "@nbr/core";
 import { getCurrentUser } from "@/lib/user-auth";
 import { ScrimmageRequestControl } from "@/components/account/scrimmage-request-control";
+import { TeamMedallion } from "@/components/team-medallion";
 import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -94,7 +95,11 @@ async function TeamPicker({
   const query = q?.trim();
   const matches = query
     ? await prisma.team.findMany({
-        where: { name: { contains: query, mode: "insensitive" }, rating: { isNot: null } },
+        where: {
+          name: { contains: query, mode: "insensitive" },
+          rating: { isNot: null },
+          isGhost: false,
+        },
         select: { id: true, name: true, slug: true, city: true, state: true },
         orderBy: { name: "asc" },
         take: 20,
@@ -182,11 +187,7 @@ function Results({
                 <Link href={`/teams/${c.slug}`} className="font-semibold text-navy-800 hover:underline">
                   {c.name}
                 </Link>
-                {c.confirmed && (
-                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
-                    ✓ Coach-confirmed
-                  </span>
-                )}
+                <TeamMedallion tier={c.confirmed ? "green" : "gray"} />
                 {c.seeking && (
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-700">
                     Looking for scrimmages
@@ -254,6 +255,8 @@ async function loadCandidates(
 ) {
   const where: Prisma.TeamWhereInput = {
     id: { not: selected.id },
+    // Only offer real teams — never scraped ghost opponents.
+    isGhost: false,
     rating: { is: { rating: { gte: rating - BAND, lte: rating + BAND } } },
     // Match within the same division: youth by age group, varsity by class.
     ...(selected.classification

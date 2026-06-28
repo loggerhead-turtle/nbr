@@ -2,6 +2,8 @@ import Link from "next/link";
 import { getRatings } from "@/lib/queries";
 import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
 import { ProvisionalBadge, GhostBadge } from "@/components/badges";
+import { TeamMedallion } from "@/components/team-medallion";
+import { teamMedallion } from "@/lib/medallion";
 import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
 export const revalidate = 3600; // ISR: static-fast, refreshed hourly
@@ -71,12 +73,22 @@ export default async function HomePage({
                         {rank ?? "—"}
                       </td>
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/teams/${r.slug}`}
-                          className="font-semibold text-navy-800 hover:underline"
-                        >
-                          {r.name}
-                        </Link>
+                        <span className="flex items-center gap-1.5">
+                          <Link
+                            href={`/teams/${r.slug}`}
+                            className={`font-semibold hover:underline ${
+                              r.isGhost ? "text-slate-400" : "text-navy-800"
+                            }`}
+                          >
+                            {r.name}
+                          </Link>
+                          <TeamMedallion
+                            tier={teamMedallion({
+                              isGhost: r.isGhost,
+                              hasApprovedClaim: r.hasApprovedClaim,
+                            })}
+                          />
+                        </span>
                         <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                           {r.city ? <span>{r.city}, {r.state}</span> : <span>{r.state}</span>}
                           {r.isProvisional && <ProvisionalBadge />}

@@ -9,6 +9,8 @@ import {
   formatDate,
 } from "@/lib/format";
 import { ProvisionalBadge, ConfidenceBadge, GhostBadge } from "@/components/badges";
+import { TeamMedallion } from "@/components/team-medallion";
+import { teamMedallion } from "@/lib/medallion";
 import { RatingChart } from "@/components/rating-chart";
 import { TeamContact } from "@/components/account/team-contact";
 
@@ -85,7 +87,16 @@ export default async function TeamPage({ params }: Params) {
       <div className="card mt-3 p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-navy-900">{team.name}</h1>
+            <h1 className="flex items-center gap-2 text-2xl font-black text-navy-900">
+              {team.name}
+              <TeamMedallion
+                tier={teamMedallion({
+                  isGhost: team.isGhost,
+                  hasApprovedClaim: team.claim?.status === "APPROVED",
+                })}
+                className="h-5 w-5 text-xs"
+              />
+            </h1>
             <p className="mt-1 text-sm text-slate-500">
               {team.city ? `${team.city}, ${team.state}` : team.state} ·{" "}
               {team.classification ? `Varsity · ${team.classification}` : ageGroupLabel(team.ageGroup)}

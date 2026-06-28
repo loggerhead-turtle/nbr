@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useRef, useTransition } from "react";
+import { useState, useRef, useTransition, useEffect, useCallback } from "react";
 import { inviteTeamAction } from "@/lib/tournament-actions";
+import { TeamMedallion } from "@/components/team-medallion";
 
 interface Hit {
   id: string;
   name: string;
   city: string | null;
+  state: string;
   rating: number | null;
+  hasApprovedClaim: boolean;
+  distanceMiles: number | null;
 }
 
 /** `excluded` maps teamId -> status so already-in/declined teams can't be re-invited. */
@@ -19,27 +23,40 @@ export function InviteTeams({
   excluded: Record<string, "INVITED" | "ACCEPTED" | "DECLINED">;
 }) {
   const [query, setQuery] = useState("");
+  const [ratingMin, setRatingMin] = useState("");
+  const [ratingMax, setRatingMax] = useState("");
+  const [near, setNear] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
   const [invited, setInvited] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const search = (q: string) => {
+  const run = useCallback(() => {
     if (debounce.current) clearTimeout(debounce.current);
-    if (q.trim().length < 2) {
+    const hasRating = ratingMin.trim() !== "" || ratingMax.trim() !== "";
+    if (query.trim().length < 2 && !hasRating) {
       setHits([]);
       return;
     }
     debounce.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/teams/search?q=${encodeURIComponent(q)}`);
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        if (ratingMin.trim()) params.set("ratingMin", ratingMin.trim());
+        if (ratingMax.trim()) params.set("ratingMax", ratingMax.trim());
+        if (near.trim()) params.set("near", near.trim());
+        const res = await fetch(`/api/teams/search?${params.toString()}`);
         const data = await res.json();
         setHits(data.teams ?? []);
       } catch {
         setHits([]);
       }
     }, 250);
-  };
+  }, [query, ratingMin, ratingMax, near]);
+
+  useEffect(() => {
+    run();
+  }, [run]);
 
   const invite = (teamId: string) => {
     const fd = new FormData();
@@ -53,29 +70,66 @@ export function InviteTeams({
 
   return (
     <div className="card p-4">
-      <label className="label" htmlFor="invsearch">Invite a team</label>
+      <label className="label" htmlFor="invsearch">Find teams to invite</label>
       <input
         id="invsearch"
         className="input"
         value={query}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          search(e.target.value);
-        }}
+        onChange={(e) => setQuery(e.target.value)}
         placeholder="Search team name…"
         autoComplete="off"
       />
+      <div className="mt-2 flex flex-wrap gap-2">
+        <div className="w-24">
+          <label className="label text-[11px]">Min rating</label>
+          <input
+            className="input"
+            value={ratingMin}
+            onChange={(e) => setRatingMin(e.target.value)}
+            inputMode="numeric"
+            placeholder="any"
+          />
+        </div>
+        <div className="w-24">
+          <label className="label text-[11px]">Max rating</label>
+          <input
+            className="input"
+            value={ratingMax}
+            onChange={(e) => setRatingMax(e.target.value)}
+            inputMode="numeric"
+            placeholder="any"
+          />
+        </div>
+        <div className="min-w-[140px] flex-1">
+          <label className="label text-[11px]">Near (city)</label>
+          <input
+            className="input"
+            value={near}
+            onChange={(e) => setNear(e.target.value)}
+            placeholder="e.g. Provo"
+            autoComplete="off"
+          />
+        </div>
+      </div>
+      <p className="mt-1 text-[11px] text-slate-400">
+        Search by name and/or a rating range. Add a city to sort by distance.
+      </p>
+
       {hits.length > 0 && (
-        <ul className="mt-2 max-h-72 divide-y divide-slate-100 overflow-auto rounded-lg border border-slate-200">
+        <ul className="mt-2 max-h-80 divide-y divide-slate-100 overflow-auto rounded-lg border border-slate-200">
           {hits.map((h) => {
             const status = excluded[h.id];
             const already = invited.has(h.id);
             return (
               <li key={h.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                <span>
+                <span className="flex items-center gap-1.5">
+                  <TeamMedallion tier={h.hasApprovedClaim ? "green" : "gray"} />
                   <span className="font-medium text-slate-800">{h.name}</span>
-                  {h.city && <span className="ml-1 text-xs text-slate-400">{h.city}</span>}
-                  {h.rating != null && <span className="ml-2 tabular-nums text-navy-700">{h.rating}</span>}
+                  {h.city && <span className="text-xs text-slate-400">{h.city}, {h.state}</span>}
+                  {h.rating != null && <span className="tabular-nums text-navy-700">{h.rating}</span>}
+                  {h.distanceMiles != null && (
+                    <span className="text-xs text-slate-400">~{h.distanceMiles} mi</span>
+                  )}
                 </span>
                 {status === "DECLINED" ? (
                   <span className="badge bg-rose-100 text-rose-700">declined — can’t re-invite</span>
