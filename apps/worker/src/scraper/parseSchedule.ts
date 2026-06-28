@@ -41,6 +41,7 @@ export interface TeamHeader {
   city: string | null;
   state: string | null;
   ageGroup: string | null; // AgeGroup enum value (U8..U18) or null
+  coaches: string[]; // staff names from the "Staff: ..." line
 }
 
 const VALID_AGE_GROUPS = new Set([
@@ -53,7 +54,7 @@ const VALID_AGE_GROUPS = new Set([
  * i.e. <name> <record> <season> <City, ST> before "Staff:" / "Follow team".
  */
 export function parseTeamHeader(rawText: string): TeamHeader {
-  const empty: TeamHeader = { name: null, city: null, state: null, ageGroup: null };
+  const empty: TeamHeader = { name: null, city: null, state: null, ageGroup: null, coaches: [] };
   const text = rawText.replace(/\s+/g, " ").trim();
   if (!text || /Oops! We could/i.test(text)) return empty;
 
@@ -80,7 +81,23 @@ export function parseTeamHeader(rawText: string): TeamHeader {
     city: loc?.[1]?.trim() ?? null,
     state: loc?.[2] ?? null,
     ageGroup,
+    coaches: parseCoaches(text),
   };
+}
+
+/**
+ * Pull the coaching staff out of the header's "Staff: A, B, C" list, which sits
+ * between "Staff:" and "Follow team". GameChanger separates names with commas;
+ * we drop obvious non-names and cap the list.
+ */
+function parseCoaches(text: string): string[] {
+  const m = text.match(/Staff:\s*(.+?)\s+(?:Follow team|HOME\s+SCHEDULE|$)/i);
+  if (!m?.[1]) return [];
+  return m[1]
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 2 && s.length <= 60 && /[a-z]/i.test(s))
+    .slice(0, 8);
 }
 
 const MONTHS: Record<string, number> = {

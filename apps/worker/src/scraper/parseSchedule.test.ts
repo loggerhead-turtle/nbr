@@ -60,6 +60,12 @@ describe("parseTeamHeader", () => {
     expect(h.city).toBe("Orem");
     expect(h.state).toBe("UT");
     expect(h.ageGroup).toBe("U14");
+    expect(h.coaches).toEqual([
+      "Jennifer Eaquinto",
+      "Greg Larsen",
+      "Gabe Eyerly",
+      "Nathan & Heidi Rich",
+    ]);
   });
 
   it("returns nulls for the error page", () => {

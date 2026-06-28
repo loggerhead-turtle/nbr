@@ -3,7 +3,7 @@
  * Records a ScrapeJob and updates the team's scrape bookkeeping. Never throws to
  * the caller — failures are captured in the returned status.
  */
-import { prisma, ScrapeStatus, AgeGroup, findPromotableTeam, mergeTeams } from "@nbr/db";
+import { prisma, ScrapeStatus, AgeGroup, findAutoMergeTarget, mergeTeams } from "@nbr/db";
 import { normalizeTeamName, teamSlug, ageGroupFromName, geocodeCity } from "@nbr/core";
 import type { BrowserContext } from "playwright";
 import { openSchedule, pageDiagnostics } from "./browser.js";
@@ -125,6 +125,7 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
       latitude: true,
       locationLocked: true,
       ageGroup: true,
+      coaches: true,
     },
   });
   if (!t) return;
@@ -138,6 +139,10 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
   // leave city/coords untouched.
   const data: Record<string, unknown> = {};
   if (!t.locationLocked && !t.city && header.city) data.city = header.city;
+
+  // Coaching staff from the team's own page powers merge-confidence scoring.
+  // Refresh whenever the page lists staff (authoritative, and rosters change).
+  if (header.coaches.length > 0) data.coaches = header.coaches;
 
   // Geocode to a centroid once we have a city but no coordinates, so the
   // scrimmage finder can match by distance.
@@ -172,12 +177,29 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
     if (doFullEnrich) console.log(`[scrape] enriched ${teamId} → "${header.name}"`);
   }
 
-  // After naming a stub, collapse a duplicate ghost (an old opponent) into it.
+  // After naming a stub, collapse a duplicate ghost (an old opponent) into it —
+  // but ONLY when we are highly confident it's the same club. Merging on
+  // name+age alone wrongly fused distinct clubs that share a name across
+  // regions (e.g. "Stars 14U" in UT vs CA). findAutoMergeTarget weighs age,
+  // location, coaches, shared games, and game-region overlap; anything short of
+  // high confidence is left for an admin on the Possible-duplicates page.
   if (doFullEnrich) {
-    const promo = await findPromotableTeam(header.name!, header.ageGroup ?? t.ageGroup);
-    if (promo && promo.id !== teamId) {
-      await mergeTeams(promo.id, teamId);
-      console.log(`[scrape] merged ghost "${promo.name}" into ${teamId}`);
+    const finalAge = (data.ageGroup as AgeGroup | undefined) ?? (t.ageGroup as AgeGroup | null);
+    const finalCoaches = (data.coaches as string[] | undefined) ?? t.coaches;
+    const auto = await findAutoMergeTarget({
+      id: teamId,
+      name: header.name!,
+      ageGroup: finalAge ?? null,
+      city: (data.city as string | undefined) ?? t.city,
+      state: t.state,
+      coaches: finalCoaches,
+    });
+    if (auto) {
+      await mergeTeams(auto.id, teamId);
+      console.log(
+        `[scrape] merged ghost "${auto.name}" into ${teamId} ` +
+          `(confidence ${auto.score.score}, ${auto.score.reasons.join("; ")})`,
+      );
     }
   }
 }

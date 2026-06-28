@@ -1,4 +1,5 @@
 import { prisma } from "@nbr/db";
+import { scoreMerge, type MergeScore } from "@nbr/core";
 
 /**
  * Normalization for duplicate detection. Unlike the scraper's opponent-matching
@@ -160,18 +161,24 @@ export interface DupTeam {
   id: string;
   name: string;
   city: string | null;
+  state: string | null;
   ageGroup: string | null;
   classification: string | null;
   gcTeamId: string | null;
   isGhost: boolean;
+  coaches: string[];
   totalGames: number;
   games: DupGame[];
+  /** States of game-graph neighbours — a locality proxy when city is unknown. */
+  regionStates: string[];
 }
 
 export interface DupPair {
   a: DupTeam;
   b: DupTeam;
   commonGames: SharedGame[];
+  /** Merge confidence (same model the scraper uses to auto-merge). */
+  confidence: MergeScore;
 }
 
 async function loadDupTeam(
@@ -203,16 +210,27 @@ async function loadDupTeam(
   ].sort((x, y) => (x.date < y.date ? 1 : -1));
 
   const byKey = new Map(games.map((g) => [`${g.oppId}|${g.date}`, g] as const));
+  // Locality proxy: states of opponents we actually located (they have a city;
+  // ghosts default to "UT" and would otherwise fake a match).
+  const regionStates = [
+    ...t.homeGames.map((g) => g.awayTeam),
+    ...t.awayGames.map((g) => g.homeTeam),
+  ]
+    .filter((o) => o.city && o.state)
+    .map((o) => o.state);
   const team: DupTeam = {
     id: t.id,
     name: t.name,
     city: t.city,
+    state: t.state,
     ageGroup: t.ageGroup,
     classification: t.classification,
     gcTeamId: t.gcTeamId,
     isGhost: t.isGhost,
+    coaches: t.coaches ?? [],
     totalGames: games.length,
     games: games.map(({ opponent, date, us, them }) => ({ opponent, date, us, them })),
+    regionStates,
   };
   return { team, byKey };
 }
@@ -241,8 +259,30 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
 
     const keepA =
       (ra.team.gcTeamId ? 1 : 0) - (rb.team.gcTeamId ? 1 : 0) || ra.team.totalGames - rb.team.totalGames;
-    out.push(keepA >= 0 ? { a: ra.team, b: rb.team, commonGames } : { a: rb.team, b: ra.team, commonGames });
+    const a = keepA >= 0 ? ra.team : rb.team;
+    const b = keepA >= 0 ? rb.team : ra.team;
+
+    const confidence = scoreMerge({
+      nameA: a.name,
+      nameB: b.name,
+      ageA: a.ageGroup,
+      ageB: b.ageGroup,
+      cityA: a.city,
+      cityB: b.city,
+      stateA: a.city ? a.state : null,
+      stateB: b.city ? b.state : null,
+      coachesA: a.coaches,
+      coachesB: b.coaches,
+      sharedGameCount: commonGames.length,
+      regionStatesA: a.regionStates,
+      regionStatesB: b.regionStates,
+    });
+
+    out.push({ a, b, commonGames, confidence });
   }
-  // Show pairs with shared games first — strongest evidence.
-  return out.sort((x, y) => y.commonGames.length - x.commonGames.length);
+  // Heat map: highest-confidence pairs first so the easy merges are up top.
+  return out.sort(
+    (x, y) =>
+      y.confidence.score - x.confidence.score || y.commonGames.length - x.commonGames.length,
+  );
 }

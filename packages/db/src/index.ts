@@ -20,9 +20,10 @@ export * from "@prisma/client";
 export { Prisma } from "@prisma/client";
 export {
   findPromotableTeam,
+  findAutoMergeTarget,
   mergeTeams,
   dedupeTeamGames,
   findCrossAgeMergeArtifacts,
   repairCrossAgeMerge,
 } from "./teams";
-export type { BadMergeFinding, BadMergeOutlier } from "./teams";
+export type { BadMergeFinding, BadMergeOutlier, AutoMergeTarget } from "./teams";

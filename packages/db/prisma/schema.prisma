@@ -91,6 +91,10 @@ model Team {
   // MaxPreps team page URL (data source for high-school varsity teams).
   maxprepsUrl    String? @unique
 
+  // Coaching staff parsed from the team's own GameChanger page ("Staff: ..."),
+  // used as a merge-confidence signal (same name + same coach ⇒ same club).
+  coaches  String[] @default([])
+
   // Location (city/state shown publicly; zip + lat/long power Phase 2 proximity).
   city      String?
   state     String  @default("UT")
