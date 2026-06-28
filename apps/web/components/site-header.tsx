@@ -4,7 +4,7 @@ const NAV = [
   { href: "/", label: "Ratings" },
   { href: "/pools", label: "Pool Generator" },
   { href: "/about", label: "About" },
-  { href: "/faq", label: "FAQ" },
+  { href: "/account", label: "Coaches" },
 ];
 
 export function SiteHeader() {

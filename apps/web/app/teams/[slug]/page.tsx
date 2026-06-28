@@ -10,6 +10,7 @@ import {
 } from "@/lib/format";
 import { ProvisionalBadge, ConfidenceBadge, GhostBadge } from "@/components/badges";
 import { RatingChart } from "@/components/rating-chart";
+import { TeamContact } from "@/components/account/team-contact";
 
 export const revalidate = 3600;
 
@@ -127,6 +128,11 @@ export default async function TeamPage({ params }: Params) {
           />
           <Stat label="State" value={team.state} />
         </dl>
+      </div>
+
+      {/* Claim / contact */}
+      <div className="mt-6">
+        <TeamContact teamId={team.id} teamSlug={team.slug} />
       </div>
 
       {/* Chart */}

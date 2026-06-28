@@ -16,6 +16,13 @@ export default async function AdminDashboard() {
       prisma.scrapeJob.findMany({ orderBy: { startedAt: "desc" }, take: 8, include: { team: true } }),
     ]);
 
+  const openReports = await prisma.report.findMany({
+    where: { status: "OPEN" },
+    include: { team: true },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
+
   return (
     <div>
       <h1 className="text-2xl font-black text-navy-900">Admin dashboard</h1>
@@ -48,6 +55,27 @@ export default async function AdminDashboard() {
           + Add game manually
         </Link>
       </div>
+
+      {openReports.length > 0 && (
+        <div className="mt-6 rounded-lg border border-rose-300 bg-rose-50 p-4">
+          <p className="text-sm font-bold text-rose-900">
+            {openReports.length} open claim report{openReports.length === 1 ? "" : "s"}
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-rose-900">
+            {openReports.map((r) => (
+              <li key={r.id} className="flex justify-between gap-2">
+                <span>
+                  <Link href={`/admin/teams?q=${encodeURIComponent(r.team.name)}`} className="font-medium underline">
+                    {r.team.name}
+                  </Link>{" "}
+                  — {r.reason}
+                </span>
+                <span className="text-xs text-rose-500">{formatDate(r.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">
         <div className="card p-5">

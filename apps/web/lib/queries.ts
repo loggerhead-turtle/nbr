@@ -108,6 +108,7 @@ export async function getTeamBySlug(slug: string) {
     where: { slug },
     include: {
       rating: true,
+      claim: { include: { user: true } },
       ratingHistory: { orderBy: { asOf: "asc" } },
       homeGames: {
         where: { status: "FINAL" },
