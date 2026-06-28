@@ -45,6 +45,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </span>
             )}
           </Link>
+          <Link href="/admin/users" className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100">
+            Users
+          </Link>
+          <Link href="/admin/tournaments" className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100">
+            Tournaments
+          </Link>
         </nav>
         <form action={logoutAction}>
           <button type="submit" className="text-sm text-slate-500 hover:text-rose-600">

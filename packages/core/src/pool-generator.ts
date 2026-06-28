@@ -42,7 +42,11 @@ export interface PoolResult {
 }
 
 export interface PoolOptions {
-  /** Run greedy swap refinement after snake seeding (default true). */
+  /**
+   * Run a greedy swap pass to equalize pool *average* rating after snake seeding.
+   * Default OFF — it distorts seed distribution (the whole point is to spread the
+   * best teams across pools by seed, not to equalize averages). Kept for opt-in.
+   */
   refine?: boolean;
   /** Max refinement iterations (default 200). */
   maxIterations?: number;
@@ -86,7 +90,7 @@ export function generatePools(
   numPools: number,
   options: PoolOptions = {},
 ): PoolResult {
-  const refine = options.refine ?? true;
+  const refine = options.refine ?? false;
   const maxIterations = options.maxIterations ?? 200;
 
   if (numPools < 1) throw new Error("numPools must be at least 1");

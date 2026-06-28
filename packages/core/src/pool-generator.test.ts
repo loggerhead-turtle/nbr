@@ -55,6 +55,16 @@ describe("generatePools", () => {
     expect(pools.map((p) => p.label)).toEqual(["Pool A", "Pool B", "Pool C"]);
   });
 
+  it("uses pure serpentine order (no average-equalizing swaps)", () => {
+    // 6 teams, 3 pools → A:[1,6] B:[2,5] C:[3,4]
+    const teams = makeTeams([2000, 1900, 1800, 1700, 1600, 1500]); // t0..t5 by rating
+    const { pools } = generatePools(teams, 3);
+    const seeds = (i: number) => pools[i]!.teams.map((t) => t.seed).sort((a, b) => a - b);
+    expect(seeds(0)).toEqual([1, 6]);
+    expect(seeds(1)).toEqual([2, 5]);
+    expect(seeds(2)).toEqual([3, 4]);
+  });
+
   it("throws when there are fewer teams than pools", () => {
     expect(() => generatePools(makeTeams([1500, 1400]), 3)).toThrow();
   });

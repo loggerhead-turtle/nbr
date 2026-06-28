@@ -1,5 +1,18 @@
 import { prisma } from "@nbr/db";
-import { normalizeTeamName } from "@nbr/core";
+
+/**
+ * Normalization for duplicate detection. Unlike the scraper's opponent-matching
+ * normalizer, this KEEPS age tokens so "Utah 12U" and "Utah 13U" aren't treated
+ * as the same team.
+ */
+function dupNorm(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
 
 /**
  * Detect likely-duplicate teams using three signals:
@@ -51,31 +64,36 @@ async function getCandidatePairs(): Promise<[string, string][]> {
   const [teams, games, dismissals] = await Promise.all([
     prisma.team.findMany({ select: { id: true, name: true } }),
     prisma.game.findMany({
-      where: { status: "FINAL" },
-      select: { homeTeamId: true, awayTeamId: true, playedAt: true },
+      where: { status: "FINAL", homeScore: { not: null }, awayScore: { not: null } },
+      select: { homeTeamId: true, awayTeamId: true, playedAt: true, homeScore: true, awayScore: true },
     }),
     prisma.duplicateDismissal.findMany({ select: { teamIdA: true, teamIdB: true } }),
   ]);
   const dismissed = new Set(dismissals.map((d) => `${d.teamIdA}|${d.teamIdB}`));
-  const norm = new Map(teams.map((t) => [t.id, normalizeTeamName(t.name)] as const));
+  const norm = new Map(teams.map((t) => [t.id, dupNorm(t.name)] as const));
 
-  const pairScores = new Map<string, number>(); // pairKey "a|b" -> shared-game count
+  const pairScores = new Map<string, number>(); // pairKey "a|b" -> identical-matchup count
   const bump = (x: string, y: string) => {
     const [a, b] = pairKey(x, y);
     const k = `${a}|${b}`;
     pairScores.set(k, (pairScores.get(k) ?? 0) + 1);
   };
 
-  // Signal 3: shared (opponent, date) — gather teams that faced the same opponent
-  // on the same day, then count co-occurrences per pair.
-  const faced = new Map<string, string[]>();
+  // Two RECORDS of the SAME team have identical games. Group by a per-team
+  // matchup signature (opponent + date + that team's score line). Teams sharing
+  // the exact same matchup line are likely the same team — NOT merely teams that
+  // both played a common opponent (that would falsely pair tournament rivals).
+  const matchup = new Map<string, string[]>();
+  const add = (key: string, teamId: string) => {
+    (matchup.get(key) ?? matchup.set(key, []).get(key)!).push(teamId);
+  };
   for (const g of games) {
     const day = g.playedAt.toISOString().slice(0, 10);
-    (faced.get(`${g.awayTeamId}|${day}`) ?? faced.set(`${g.awayTeamId}|${day}`, []).get(`${g.awayTeamId}|${day}`)!).push(g.homeTeamId);
-    (faced.get(`${g.homeTeamId}|${day}`) ?? faced.set(`${g.homeTeamId}|${day}`, []).get(`${g.homeTeamId}|${day}`)!).push(g.awayTeamId);
+    add(`${g.awayTeamId}|${day}|${g.homeScore}-${g.awayScore}`, g.homeTeamId);
+    add(`${g.homeTeamId}|${day}|${g.awayScore}-${g.homeScore}`, g.awayTeamId);
   }
-  for (const peers of faced.values()) {
-    const uniq = [...new Set(peers)];
+  for (const bucket of matchup.values()) {
+    const uniq = [...new Set(bucket)];
     for (let i = 0; i < uniq.length; i++)
       for (let j = i + 1; j < uniq.length; j++) bump(uniq[i]!, uniq[j]!);
   }
