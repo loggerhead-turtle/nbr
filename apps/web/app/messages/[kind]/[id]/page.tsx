@@ -1,27 +1,29 @@
 import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
-import { prisma } from "@nbr/db";
 import { getCurrentUser } from "@/lib/user-auth";
-import { loadThread } from "@/lib/queries";
+import { loadThread, type ThreadKind } from "@/lib/queries";
+import { markRead } from "@/lib/message-actions";
 import { formatDate } from "@/lib/format";
 import { ThreadPanel } from "@/components/account/thread-panel";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Messages", robots: { index: false } };
 
-export default async function ThreadPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function ThreadPage({
+  params,
+}: {
+  params: Promise<{ kind: string; id: string }>;
+}) {
+  const { kind, id } = await params;
+  if (kind !== "scrimmage" && kind !== "tournament") notFound();
   const user = await getCurrentUser();
-  if (!user) redirect(`/login?next=/messages/${id}`);
+  if (!user) redirect(`/login?next=/messages/${kind}/${id}`);
 
-  const thread = await loadThread(id, user.id);
+  const thread = await loadThread(kind as ThreadKind, id, user.id);
   if (!thread) notFound();
 
-  // Mark this thread read for the viewer (clears their unread badge).
-  await prisma.scrimmageRequest.update({
-    where: { id },
-    data: thread.side === "from" ? { fromReadAt: new Date() } : { toReadAt: new Date() },
-  });
+  // Mark read for the viewer (clears their unread badge).
+  await markRead(thread.kind, thread.id, user.id);
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
@@ -31,21 +33,23 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
 
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-black text-navy-900">
-          {thread.myTeamName} ↔{" "}
-          {thread.otherTeam ? (
-            <Link href={`/teams/${thread.otherTeam.slug}`} className="hover:underline">
-              {thread.otherTeam.name}
+          {thread.myLabel} ↔{" "}
+          {thread.otherTeamSlug ? (
+            <Link href={`/teams/${thread.otherTeamSlug}`} className="hover:underline">
+              {thread.otherLabel}
             </Link>
           ) : (
-            "a team"
+            thread.otherLabel
           )}
         </h1>
-        <span className="badge bg-slate-200 text-slate-700">{thread.status}</span>
+        <span className="badge bg-slate-200 text-slate-700">
+          {thread.kind === "tournament" ? "Tournament" : "Scrimmage"} · {thread.status}
+        </span>
       </div>
 
       {(thread.otherEmail || thread.otherPhone) && (
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-          <span className="font-semibold">{thread.otherName ?? "The other coach"} shared:</span>{" "}
+          <span className="font-semibold">{thread.otherName ?? "They"} shared:</span>{" "}
           {thread.otherEmail && (
             <a href={`mailto:${thread.otherEmail}`} className="underline">
               {thread.otherEmail}
@@ -78,7 +82,8 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
       </div>
 
       <ThreadPanel
-        requestId={thread.id}
+        kind={thread.kind}
+        id={thread.id}
         myShareEmail={thread.myShareEmail}
         mySharePhone={thread.mySharePhone}
       />

@@ -1,19 +1,21 @@
 "use client";
 
 import { useTransition } from "react";
-import { sendScrimmageMessageAction, setThreadShareAction } from "@/lib/message-actions";
+import { sendMessageAction, setThreadShareAction } from "@/lib/message-actions";
 
 /**
- * Reply box + revocable contact-sharing toggles for a scrimmage thread. Toggling
- * "Share my email/phone" shares it with the other coach immediately; unchecking
- * revokes it.
+ * Reply box + revocable contact-sharing toggles for a thread (scrimmage or
+ * tournament). Toggling "Share my email/phone" shares it with the other party
+ * immediately; unchecking revokes it.
  */
 export function ThreadPanel({
-  requestId,
+  kind,
+  id,
   myShareEmail,
   mySharePhone,
 }: {
-  requestId: string;
+  kind: "scrimmage" | "tournament";
+  id: string;
   myShareEmail: boolean;
   mySharePhone: boolean;
 }) {
@@ -21,7 +23,8 @@ export function ThreadPanel({
 
   const toggle = (field: "email" | "phone", checked: boolean) => {
     const fd = new FormData();
-    fd.set("requestId", requestId);
+    fd.set("kind", kind);
+    fd.set("id", id);
     fd.set("field", field);
     fd.set("value", checked ? "1" : "0");
     start(async () => {
@@ -31,15 +34,10 @@ export function ThreadPanel({
 
   return (
     <div className="mt-4">
-      <form action={sendScrimmageMessageAction} className="flex flex-col gap-2">
-        <input type="hidden" name="requestId" value={requestId} />
-        <textarea
-          name="body"
-          required
-          rows={3}
-          placeholder="Write a message…"
-          className="input"
-        />
+      <form action={sendMessageAction} className="flex flex-col gap-2">
+        <input type="hidden" name="kind" value={kind} />
+        <input type="hidden" name="id" value={id} />
+        <textarea name="body" required rows={3} placeholder="Write a message…" className="input" />
         <div className="flex justify-end">
           <button className="btn-primary">Send</button>
         </div>
@@ -70,7 +68,7 @@ export function ThreadPanel({
           </label>
         </div>
         <p className="mt-1 text-xs text-slate-400">
-          Off by default. Unchecking revokes access for the other coach.
+          Off by default. Unchecking revokes access for the other party.
         </p>
       </div>
     </div>

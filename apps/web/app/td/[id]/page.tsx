@@ -171,6 +171,9 @@ function InviteList({
               </span>
             </span>
             <div className="flex gap-2">
+              <Link href={`/messages/tournament/${inv.id}`} className="btn-ghost text-navy-700">
+                Message
+              </Link>
               {showManualStatus && (
                 <>
                   <form action={setInviteStatusAction}>
