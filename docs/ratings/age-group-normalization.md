@@ -126,14 +126,19 @@ All of this reuses the existing backtest harness
 
 ## Operating it
 
-- Engine selection is by env var, like the existing models:
-  `RATING_ALGORITHM=bt-age-v1 pnpm --filter @nbr/worker recompute`. The recompute
-  log prints the fitted age curve and per-age bridge counts.
+- **`bt-age-v1` is the default model** (`DEFAULT_RATING_ALGORITHM` in
+  [`packages/core/src/schemas.ts`](../../packages/core/src/schemas.ts)).
+- A site admin can switch the active model from **Admin → Settings** (the
+  "Rating algorithm" form). The choice is stored in the `AppSetting` key/value
+  table under `ratingAlgorithm` and takes effect on the next recompute.
+- The recompute resolves the model in priority order: **admin setting → the
+  `RATING_ALGORITHM` env var (ad-hoc override) → the default.** The recompute log
+  prints the chosen model plus the fitted age curve and per-age bridge counts.
 - Tunables (engine options, all with sensible defaults): `ageStepPrior`,
   `ageCurveLambda`, `ageAnchorLambda`, `enforceMonotone`. Calibrate against the
   cross-age backtest.
-- No schema change is required: ratings stay in `Rating.rating` on the same
-  display scale.
+- No schema change is required: the setting reuses the existing `AppSetting`
+  table, and ratings stay in `Rating.rating` on the same display scale.
 
 ## References
 

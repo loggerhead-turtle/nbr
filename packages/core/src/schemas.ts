@@ -18,6 +18,40 @@ export const AGE_GROUPS = [
   "OPEN",
 ] as const;
 
+/**
+ * Statistical evaluation models a site admin can choose from for rating
+ * recomputes. Order is display order; the first entry is the recommended one.
+ */
+export const RATING_ALGORITHMS = [
+  {
+    id: "bt-age-v1",
+    label: "Bradley-Terry · age-normalized",
+    description:
+      "Unified cross-age scale: every age group sits on one developmental curve, so an average 16U team ranks above an average 8U team. Recommended.",
+  },
+  {
+    id: "bt-mov-v1",
+    label: "Bradley-Terry · margin of victory",
+    description:
+      "Global, margin-aware model. Rates teams relative to the opponents they played, with no age baseline (an 8U and a 16U can share a number).",
+  },
+  {
+    id: "glicko2-v1",
+    label: "Glicko-2",
+    description:
+      "Sequential, per-period model with rating deviation and volatility. No age baseline.",
+  },
+] as const;
+
+export type RatingAlgorithmId = (typeof RATING_ALGORITHMS)[number]["id"];
+
+/** The model used when an admin hasn't chosen one. */
+export const DEFAULT_RATING_ALGORITHM: RatingAlgorithmId = "bt-age-v1";
+
+export function isRatingAlgorithm(value: string): value is RatingAlgorithmId {
+  return RATING_ALGORITHMS.some((a) => a.id === value);
+}
+
 // GameChanger opaque team ids are short alphanumeric strings (e.g. 21nCCNFQXjHB).
 export const gcTeamIdSchema = z
   .string()

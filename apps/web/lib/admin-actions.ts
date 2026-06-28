@@ -13,6 +13,7 @@ import {
   CLASSIFICATIONS,
   geocodeCity,
   normalizeWebsiteUrl,
+  isRatingAlgorithm,
 } from "@nbr/core";
 import { AGE_OFFSET_KEY, clampAgeStep } from "./age-offset";
 import { LIVE_SEARCH_KEY } from "./site-settings";
@@ -20,6 +21,7 @@ import { findPromotableTeam, mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew } from "./render-jobs";
 import { sendEmail, emailLayout, siteUrl } from "./email";
 import { getCurrentSeasonYear } from "./season";
+import { setRatingAlgorithm } from "./settings";
 import {
   ADMIN_COOKIE,
   adminCookieOptions,
@@ -434,6 +436,18 @@ export async function mergeTeamAction(formData: FormData): Promise<void> {
   await mergeTeams(sourceId, targetId);
   revalidatePath("/admin/teams");
   revalidatePath("/");
+}
+
+export async function setRatingAlgorithmAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const algorithm = String(formData.get("algorithm") ?? "");
+  if (!isRatingAlgorithm(algorithm)) return { error: "Unknown rating algorithm." };
+  await setRatingAlgorithm(algorithm);
+  revalidatePath("/admin/settings");
+  return { ok: true, message: "Saved. The next rating recompute will use this model." };
 }
 
 export async function setUserRoleAction(formData: FormData): Promise<void> {

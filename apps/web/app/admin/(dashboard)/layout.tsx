@@ -54,6 +54,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/age-offset" className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100">
             Age offset
           </Link>
+          <Link href="/admin/settings" className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100">
+            Settings
+          </Link>
         </nav>
         <form action={logoutAction}>
           <button type="submit" className="text-sm text-slate-500 hover:text-rose-600">
