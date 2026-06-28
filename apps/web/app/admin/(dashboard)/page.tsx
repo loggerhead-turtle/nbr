@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@nbr/db";
 import { formatDate } from "@/lib/format";
+import { setTdStatusAction } from "@/lib/admin-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,12 @@ export default async function AdminDashboard() {
     include: { team: true },
     orderBy: { createdAt: "desc" },
     take: 10,
+  });
+
+  const tdRequests = await prisma.user.findMany({
+    where: { tdStatus: "REQUESTED" },
+    orderBy: { tdRequestedAt: "desc" },
+    take: 20,
   });
 
   return (
@@ -71,6 +78,38 @@ export default async function AdminDashboard() {
                   — {r.reason}
                 </span>
                 <span className="text-xs text-rose-500">{formatDate(r.createdAt)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {tdRequests.length > 0 && (
+        <div className="mt-6 rounded-lg border border-sky-300 bg-sky-50 p-4">
+          <p className="text-sm font-bold text-sky-900">
+            {tdRequests.length} tournament-director request{tdRequests.length === 1 ? "" : "s"}
+          </p>
+          <ul className="mt-2 space-y-2 text-sm text-sky-900">
+            {tdRequests.map((u) => (
+              <li key={u.id} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <strong>{u.firstName} {u.lastName}</strong> ({u.email})
+                  {u.tdTournamentName ? ` — ${u.tdTournamentName}` : ""}
+                  {u.tdOrg ? `, ${u.tdOrg}` : ""}
+                  {u.tdWebsite ? ` · ${u.tdWebsite}` : ""}
+                </span>
+                <span className="flex gap-2">
+                  <form action={setTdStatusAction}>
+                    <input type="hidden" name="userId" value={u.id} />
+                    <input type="hidden" name="status" value="APPROVED" />
+                    <button className="btn-ghost text-emerald-700">Approve</button>
+                  </form>
+                  <form action={setTdStatusAction}>
+                    <input type="hidden" name="userId" value={u.id} />
+                    <input type="hidden" name="status" value="REJECTED" />
+                    <button className="btn-ghost text-rose-600">Reject</button>
+                  </form>
+                </span>
               </li>
             ))}
           </ul>

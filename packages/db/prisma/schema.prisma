@@ -124,9 +124,10 @@ model Team {
   scrapeJobs    ScrapeJob[]
 
   // Phase 2 relations
-  claim         Claim?
-  reports       Report[]
-  scrimmagePref ScrimmagePref?
+  claim            Claim?
+  reports          Report[]
+  scrimmagePref    ScrimmagePref?
+  tournamentInvites TournamentInvite[]
 
   @@index([state, ageGroup])
   @@index([classification])
@@ -286,6 +287,14 @@ model User {
   emailVerified DateTime?
   image         String?
   role          UserRole  @default(USER)
+
+  // Tournament-director status + profile.
+  tdStatus         String    @default("NONE") // NONE | REQUESTED | APPROVED | REJECTED
+  tdOrg            String?
+  tdWebsite        String?
+  tdTournamentName String?
+  tdRequestedAt    DateTime?
+
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -294,6 +303,32 @@ model User {
   claims        Claim[]
   reports       Report[]
   scrimmagePref ScrimmagePref[]
+  tournaments   Tournament[]
+}
+
+model Tournament {
+  id             String   @id @default(cuid())
+  directorUserId String
+  director       User     @relation(fields: [directorUserId], references: [id], onDelete: Cascade)
+  name           String
+  createdAt      DateTime @default(now())
+
+  invites TournamentInvite[]
+
+  @@index([directorUserId])
+}
+
+model TournamentInvite {
+  id           String     @id @default(cuid())
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  teamId       String
+  team         Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  status       String     @default("INVITED") // INVITED | ACCEPTED | DECLINED
+  createdAt    DateTime   @default(now())
+
+  @@unique([tournamentId, teamId])
+  @@index([teamId, status])
 }
 
 model Account {

@@ -5,7 +5,9 @@ import { prisma } from "@nbr/db";
 import { getCurrentUser } from "@/lib/user-auth";
 import { logoutUserAction } from "@/lib/account-actions";
 import { respondScrimmageRequestAction } from "@/lib/scrimmage-actions";
+import { respondTournamentInviteAction } from "@/lib/tournament-actions";
 import { ScrimmageSettings } from "@/components/account/scrimmage-settings";
+import { TdRequestForm } from "@/components/account/td-request";
 import { formatDate } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -15,13 +17,26 @@ export default async function AccountPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?next=/account");
 
-  const claims = await prisma.claim.findMany({
-    where: { userId: user.id },
-    include: { team: { include: { scrimmagePref: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [account, claims] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { tdStatus: true, tdTournamentName: true, tdOrg: true, tdWebsite: true },
+    }),
+    prisma.claim.findMany({
+      where: { userId: user.id },
+      include: { team: { include: { scrimmagePref: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
   const myTeamIds = claims.map((c) => c.team.id);
   const myTeamName = new Map(claims.map((c) => [c.team.id, c.team.name] as const));
+
+  // Tournament invites to the user's claimed teams.
+  const tInvites = await prisma.tournamentInvite.findMany({
+    where: { teamId: { in: myTeamIds }, status: "INVITED" },
+    include: { tournament: { include: { director: true } } },
+    orderBy: { createdAt: "desc" },
+  });
 
   const [incoming, sent] = await Promise.all([
     prisma.scrimmageRequest.findMany({
@@ -97,6 +112,64 @@ export default async function AccountPage() {
           </ul>
         </section>
       )}
+
+      {/* Tournament invitations */}
+      {tInvites.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-bold text-navy-900">Tournament invitations</h2>
+          <ul className="mt-3 space-y-3">
+            {tInvites.map((inv) => (
+              <li key={inv.id} className="card p-4">
+                <p className="text-sm">
+                  <strong>{inv.tournament.name}</strong>
+                  {inv.tournament.director.tdOrg ? ` (${inv.tournament.director.tdOrg})` : ""} invited{" "}
+                  <strong>{myTeamName.get(inv.teamId)}</strong>.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <form action={respondTournamentInviteAction}>
+                    <input type="hidden" name="inviteId" value={inv.id} />
+                    <input type="hidden" name="decision" value="ACCEPTED" />
+                    <button className="btn-primary">Accept</button>
+                  </form>
+                  <form action={respondTournamentInviteAction}>
+                    <input type="hidden" name="inviteId" value={inv.id} />
+                    <input type="hidden" name="decision" value="DECLINED" />
+                    <button className="btn-ghost">Decline</button>
+                  </form>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* Tournament director */}
+      <section className="mt-8">
+        <h2 className="text-lg font-bold text-navy-900">Tournament director</h2>
+        <div className="card mt-3 p-5">
+          {account?.tdStatus === "APPROVED" ? (
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-slate-600">
+                You’re an approved tournament director
+                {account.tdTournamentName ? ` for ${account.tdTournamentName}` : ""}.
+              </p>
+              <Link href="/td" className="btn-primary">
+                Open TD portal →
+              </Link>
+            </div>
+          ) : account?.tdStatus === "REQUESTED" ? (
+            <p className="text-sm text-amber-700">
+              Your request has been submitted to the administrator for consideration.
+            </p>
+          ) : (
+            <TdRequestForm
+              tournamentName={account?.tdTournamentName ?? null}
+              org={account?.tdOrg ?? null}
+              website={account?.tdWebsite ?? null}
+            />
+          )}
+        </div>
+      </section>
 
       {/* My teams + scrimmage settings */}
       <section className="mt-8">

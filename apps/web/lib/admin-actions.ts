@@ -351,6 +351,15 @@ export async function mergeTeamAction(formData: FormData): Promise<void> {
   revalidatePath("/");
 }
 
+export async function setTdStatusAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const status = String(formData.get("status") ?? "");
+  if (!userId || !["APPROVED", "REJECTED", "NONE"].includes(status)) return;
+  await prisma.user.update({ where: { id: userId }, data: { tdStatus: status } });
+  revalidatePath("/admin");
+}
+
 export async function dismissDuplicateAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const a = String(formData.get("teamIdA") ?? "");
