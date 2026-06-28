@@ -16,9 +16,10 @@ export async function GET(req: NextRequest) {
   const ratingMax = numParam(p.get("ratingMax"));
   const near = p.get("near")?.trim() || undefined;
   const nearState = p.get("nearState")?.trim() || "UT";
+  const maxMiles = numParam(p.get("maxMiles"));
 
-  // Require either a name query or a rating filter so we don't dump the whole DB.
-  if (q.length < 2 && ratingMin == null && ratingMax == null) {
+  // Require at least one real filter so we don't dump the whole DB.
+  if (q.length < 2 && ratingMin == null && ratingMax == null && !age && !classification && !near) {
     return NextResponse.json({ teams: [] });
   }
 
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
         : null;
     return {
       id: t.id,
+      slug: t.slug,
       name: t.name,
       city: t.city,
       state: t.state,
@@ -69,16 +71,22 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  // Optional hard distance cap (only meaningful when we have an origin).
+  let out = rows;
+  if (origin && maxMiles != null) {
+    out = rows.filter((r) => r.distanceMiles != null && r.distanceMiles <= maxMiles);
+  }
+
   // When ranking by distance, located teams first (nearest), then the rest.
   if (origin) {
-    rows.sort(
+    out = [...out].sort(
       (a, b) =>
         (a.distanceMiles ?? Number.POSITIVE_INFINITY) -
         (b.distanceMiles ?? Number.POSITIVE_INFINITY),
     );
   }
 
-  return NextResponse.json({ teams: rows, geocoded: !!origin });
+  return NextResponse.json({ teams: out, geocoded: !!origin });
 }
 
 function numParam(v: string | null): number | null {
