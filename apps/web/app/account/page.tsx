@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@nbr/db";
 import { getCurrentUser, isCurrentUserAdmin } from "@/lib/user-auth";
 import { logoutUserAction } from "@/lib/account-actions";
-import { respondScrimmageRequestAction } from "@/lib/scrimmage-actions";
+import { respondScrimmageRequestAction, cancelScrimmageRequestAction } from "@/lib/scrimmage-actions";
 import { respondTournamentInviteAction } from "@/lib/tournament-actions";
 import { ScrimmageSettings } from "@/components/account/scrimmage-settings";
 import { TdRequestForm } from "@/components/account/td-request";
@@ -261,6 +261,14 @@ export default async function AccountPage() {
                   >
                     {r.status}
                   </span>
+                  {r.status === "PENDING" && (
+                    <form action={cancelScrimmageRequestAction}>
+                      <input type="hidden" name="requestId" value={r.id} />
+                      <button className="text-xs font-medium text-rose-600 hover:text-rose-700">
+                        Cancel
+                      </button>
+                    </form>
+                  )}
                 </span>
               </li>
             ))}
