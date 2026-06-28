@@ -128,6 +128,29 @@ export async function getTeamBySlug(slug: string) {
   });
 }
 
+/**
+ * Walk the succession chain (newest team's predecessors) to build a season-by-
+ * season website history. Each prior season had its own GameChanger team page.
+ */
+export async function getTeamSeasonHistory(
+  predecessorTeamId: string | null,
+): Promise<{ id: string; name: string; slug: string; gcTeamId: string | null; website: string | null; seasonYear: number | null }[]> {
+  const out: { id: string; name: string; slug: string; gcTeamId: string | null; website: string | null; seasonYear: number | null }[] = [];
+  let cursor = predecessorTeamId;
+  let guard = 0;
+  while (cursor && guard < 15) {
+    const t = await prisma.team.findUnique({
+      where: { id: cursor },
+      select: { id: true, name: true, slug: true, gcTeamId: true, website: true, seasonYear: true, predecessorTeamId: true },
+    });
+    if (!t) break;
+    out.push({ id: t.id, name: t.name, slug: t.slug, gcTeamId: t.gcTeamId, website: t.website, seasonYear: t.seasonYear });
+    cursor = t.predecessorTeamId;
+    guard += 1;
+  }
+  return out;
+}
+
 export async function getAllTeamSlugs(): Promise<{ slug: string; updatedAt: Date }[]> {
   return prisma.team.findMany({
     where: {

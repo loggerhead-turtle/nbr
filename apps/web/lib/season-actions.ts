@@ -68,6 +68,9 @@ export async function createSuccessorAction(
       scrapeEnabled: true,
       seasonYear: season ?? undefined,
       predecessorTeamId,
+      // Carry the club's own website forward; the GameChanger page updates
+      // automatically from the new team's ID (the old page stays in history).
+      website: old?.website ?? undefined,
       rating: { create: {} },
     },
   });

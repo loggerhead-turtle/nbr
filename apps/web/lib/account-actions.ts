@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@nbr/db";
+import { normalizeWebsiteUrl } from "@nbr/core";
 import {
   USER_COOKIE,
   userCookieOptions,
@@ -95,6 +96,28 @@ export async function claimTeamAction(_prev: AccountState, formData: FormData): 
 
   revalidatePath(`/teams/${team.slug}`);
   redirect(`/teams/${team.slug}?claimed=1`);
+}
+
+export async function updateTeamWebsiteAction(
+  _prev: AccountState,
+  formData: FormData,
+): Promise<AccountState> {
+  const user = await getCurrentUser();
+  if (!user) redirect("/login?next=/account");
+  const teamId = String(formData.get("teamId") ?? "");
+  const claim = await prisma.claim.findUnique({ where: { teamId } });
+  if (!claim || claim.userId !== user!.id) {
+    return { error: "You can only manage teams you’ve claimed." };
+  }
+  const website = normalizeWebsiteUrl(String(formData.get("website") ?? ""));
+  const team = await prisma.team.update({
+    where: { id: teamId },
+    data: { website },
+    select: { slug: true },
+  });
+  revalidatePath(`/teams/${team.slug}`);
+  revalidatePath("/account");
+  return { ok: true, message: website ? "Team website saved." : "Team website cleared." };
 }
 
 export async function reportClaimAction(_prev: AccountState, formData: FormData): Promise<AccountState> {

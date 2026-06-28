@@ -38,6 +38,7 @@ export default async function ManageTeamsPage({
     classification: t.classification,
     city: t.city,
     locationLocked: t.locationLocked,
+    website: t.website,
     scrapeEnabled: t.scrapeEnabled,
     isGhost: t.isGhost,
     games: t._count.homeGames + t._count.awayGames,

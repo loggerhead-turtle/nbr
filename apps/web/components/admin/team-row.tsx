@@ -20,6 +20,7 @@ export interface TeamRowData {
   classification: string | null;
   city: string | null;
   locationLocked: boolean;
+  website: string | null;
   scrapeEnabled: boolean;
   isGhost: boolean;
   games: number;
@@ -54,6 +55,15 @@ export function TeamRow({ team }: { team: TeamRowData }) {
             defaultValue={team.city ?? ""}
             placeholder="(none)"
             className="input"
+          />
+        </div>
+        <div className="min-w-[170px] flex-1">
+          <label className="label">Website</label>
+          <input
+            name="website"
+            defaultValue={team.website ?? ""}
+            placeholder="https://…"
+            className="input text-xs"
           />
         </div>
         <div>

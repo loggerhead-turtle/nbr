@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getTeamBySlug, getTeamRank } from "@/lib/queries";
+import { getTeamBySlug, getTeamRank, getTeamSeasonHistory } from "@/lib/queries";
+import { gameChangerUrl } from "@nbr/core";
 import {
   formatRating,
   formatRecord,
@@ -63,6 +64,8 @@ export default async function TeamPage({ params }: Params) {
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   const rank = team.rating ? await getTeamRank(team.id, team.rating.rating) : null;
+  const gcUrl = gameChangerUrl(team.gcTeamId);
+  const seasonHistory = await getTeamSeasonHistory(team.predecessorTeamId);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -139,12 +142,74 @@ export default async function TeamPage({ params }: Params) {
           />
           <Stat label="State" value={team.state} />
         </dl>
+
+        {(gcUrl || team.website) && (
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4 text-sm">
+            {gcUrl && (
+              <a
+                href={gcUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-slate-200 px-3 py-1.5 font-medium text-navy-800 hover:bg-slate-50"
+              >
+                GameChanger page ↗
+              </a>
+            )}
+            {team.website && (
+              <a
+                href={team.website}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-slate-200 px-3 py-1.5 font-medium text-navy-800 hover:bg-slate-50"
+              >
+                Team website ↗
+              </a>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Claim / contact */}
       <div className="mt-6">
         <TeamContact teamId={team.id} teamSlug={team.slug} />
       </div>
+
+      {/* Season history (previous GameChanger team pages) */}
+      {seasonHistory.length > 0 && (
+        <div className="card mt-6 p-5">
+          <h2 className="font-bold text-navy-900">Past seasons</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            Each season this club registered a new GameChanger team; its rating carried forward.
+          </p>
+          <ul className="mt-3 divide-y divide-slate-100 text-sm">
+            {seasonHistory.map((h) => {
+              const url = gameChangerUrl(h.gcTeamId);
+              return (
+                <li key={h.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span className="text-slate-700">
+                    {h.seasonYear ? <span className="font-semibold">{h.seasonYear}</span> : null}{" "}
+                    <Link href={`/teams/${h.slug}`} className="text-navy-800 hover:underline">
+                      {h.name}
+                    </Link>
+                  </span>
+                  <span className="flex flex-wrap gap-3 text-xs">
+                    {url && (
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-navy-700 underline">
+                        GameChanger ↗
+                      </a>
+                    )}
+                    {h.website && (
+                      <a href={h.website} target="_blank" rel="noopener noreferrer" className="text-navy-700 underline">
+                        Website ↗
+                      </a>
+                    )}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
 
       {/* Chart */}
       <div className="card mt-6 p-6">
