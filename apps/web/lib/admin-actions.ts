@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma, GameSource, GameStatus } from "@nbr/db";
 import { createTeamSchema, createGameSchema, teamSlug, gcTeamIdSchema } from "@nbr/core";
+import { findPromotableTeam, mergeTeams } from "./teams";
 import {
   ADMIN_COOKIE,
   adminCookieOptions,
@@ -75,6 +76,37 @@ export async function createTeamAction(
     if (existing) {
       return { error: `That GameChanger ID is already linked to “${existing.name}”.` };
     }
+  }
+
+  // If this team already exists as an auto-created ghost, promote it in place so
+  // its existing games carry over instead of creating a duplicate.
+  const promo = await findPromotableTeam(data.name, data.ageGroup);
+  if (promo) {
+    await prisma.team.update({
+      where: { id: promo.id },
+      data: {
+        name: data.name,
+        gcTeamId: data.gcTeamId ?? null,
+        ageGroup: data.ageGroup ?? undefined,
+        division: data.division ?? undefined,
+        city: data.city ?? undefined,
+        state: data.state,
+        zip: data.zip ?? undefined,
+        isGhost: false,
+        scrapeEnabled: true,
+        lastScrapedAt: null,
+        nextScrapeAfter: null,
+        consecutiveFailures: 0,
+      },
+    });
+    revalidatePath("/");
+    revalidatePath("/admin/teams");
+    return {
+      ok: true,
+      message: `Linked to existing team “${promo.name}” (kept its ${promo.games} game${
+        promo.games === 1 ? "" : "s"
+      }). It will be scraped on the next run.`,
+    };
   }
 
   const slug = await uniqueSlug(teamSlug(data.name, data.ageGroup));
@@ -211,6 +243,15 @@ export async function updateTeamAction(
   revalidatePath("/admin/teams");
   revalidatePath("/");
   return { ok: true, message: "Saved." };
+}
+
+export async function mergeTeamAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const sourceId = String(formData.get("sourceId") ?? "");
+  const targetId = String(formData.get("targetId") ?? "");
+  await mergeTeams(sourceId, targetId);
+  revalidatePath("/admin/teams");
+  revalidatePath("/");
 }
 
 export async function deleteTeamAction(formData: FormData): Promise<void> {

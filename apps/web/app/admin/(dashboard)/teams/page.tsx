@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@nbr/db";
 import { formatDate } from "@/lib/format";
 import { TeamRow, type TeamRowData } from "@/components/admin/team-row";
+import { MergeForm } from "@/components/admin/merge-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Manage teams", robots: { index: false } };
@@ -47,6 +48,15 @@ export default async function ManageTeamsPage({
         {rows.length} team{rows.length === 1 ? "" : "s"}. Fix a GameChanger ID and Save to re-queue
         it for scraping. Deleting a team also removes its games.
       </p>
+
+      <div className="mb-6">
+        <p className="mb-1 text-sm font-semibold text-navy-900">Merge duplicates</p>
+        <p className="mb-2 text-xs text-slate-500">
+          Combine an accidental duplicate (e.g. an auto-created “unverified” team and the one you
+          added) into a single team. Games move over and duplicate matchups are removed.
+        </p>
+        <MergeForm teams={rows.map((r) => ({ id: r.id, label: `${r.name}${r.isGhost ? " (unverified)" : ""} · ${r.games}g` }))} />
+      </div>
 
       <div className="space-y-3">
         {rows.map((t) => (

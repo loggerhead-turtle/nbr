@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@nbr/db";
 import { createTeamSchema, teamSlug } from "@nbr/core";
+import { findPromotableTeam } from "./teams";
 import type { ActionState } from "./admin-actions";
 
 async function uniqueSlug(base: string): Promise<string> {
@@ -46,6 +47,33 @@ export async function submitTeamAction(
         message: `Good news — “${existing.name}” is already in our system.`,
       };
     }
+  }
+
+  // Promote a matching ghost team in place instead of creating a duplicate.
+  const promo = await findPromotableTeam(data.name, data.ageGroup);
+  if (promo) {
+    await prisma.team.update({
+      where: { id: promo.id },
+      data: {
+        name: data.name,
+        gcTeamId: data.gcTeamId ?? null,
+        ageGroup: data.ageGroup ?? undefined,
+        city: data.city ?? undefined,
+        state: data.state,
+        zip: data.zip ?? undefined,
+        isGhost: false,
+        scrapeEnabled: true,
+        lastScrapedAt: null,
+        nextScrapeAfter: null,
+        consecutiveFailures: 0,
+      },
+    });
+    revalidatePath("/");
+    return {
+      ok: true,
+      message:
+        "Thanks! We matched this to a team already in our system and linked it. Its scores will start updating shortly.",
+    };
   }
 
   const slug = await uniqueSlug(teamSlug(data.name, data.ageGroup));
