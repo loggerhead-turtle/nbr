@@ -151,6 +151,55 @@ export async function getTeamSeasonHistory(
   return out;
 }
 
+export interface MapPoint {
+  slug: string;
+  name: string;
+  lat: number;
+  lng: number;
+  tier: "green" | "gray" | "ghost";
+}
+
+/** Located teams for the map, plus summary counts (verified / coached / etc.). */
+export async function getTeamMapData(): Promise<{
+  points: MapPoint[];
+  counts: { verified: number; coached: number; ghost: number; unlocatedVerified: number };
+}> {
+  try {
+    const located = await prisma.team.findMany({
+      where: { isActive: true, latitude: { not: null }, longitude: { not: null } },
+      select: {
+        slug: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+        isGhost: true,
+        claim: { select: { status: true } },
+      },
+    });
+
+    const points: MapPoint[] = located.map((t) => ({
+      slug: t.slug,
+      name: t.name,
+      lat: t.latitude!,
+      lng: t.longitude!,
+      tier: t.isGhost ? "ghost" : t.claim?.status === "APPROVED" ? "green" : "gray",
+    }));
+
+    const verified = points.filter((p) => p.tier !== "ghost").length;
+    const coached = points.filter((p) => p.tier === "green").length;
+    const ghost = points.filter((p) => p.tier === "ghost").length;
+
+    // Verified teams we couldn't place yet (no coordinates).
+    const unlocatedVerified = await prisma.team.count({
+      where: { isActive: true, isGhost: false, OR: [{ latitude: null }, { longitude: null }] },
+    });
+
+    return { points, counts: { verified, coached, ghost, unlocatedVerified } };
+  } catch {
+    return { points: [], counts: { verified: 0, coached: 0, ghost: 0, unlocatedVerified: 0 } };
+  }
+}
+
 export async function getAllTeamSlugs(): Promise<{ slug: string; updatedAt: Date }[]> {
   return prisma.team.findMany({
     where: {
