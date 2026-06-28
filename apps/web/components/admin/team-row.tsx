@@ -12,6 +12,7 @@ export interface TeamRowData {
   gcTeamId: string | null;
   ageGroup: string | null;
   classification: string | null;
+  city: string | null;
   scrapeEnabled: boolean;
   isGhost: boolean;
   games: number;
@@ -79,6 +80,8 @@ export function TeamRow({ team }: { team: TeamRowData }) {
 
       <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
         <span>
+          {team.city ? team.city : "no location"}
+          {" · "}
           {team.games} game{team.games === 1 ? "" : "s"}
           {team.isGhost && " · unverified"}
           {team.lastScrapedAt && ` · last scraped ${team.lastScrapedAt}`}

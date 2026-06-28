@@ -36,6 +36,7 @@ export default async function ManageTeamsPage({
     gcTeamId: t.gcTeamId,
     ageGroup: t.ageGroup,
     classification: t.classification,
+    city: t.city,
     scrapeEnabled: t.scrapeEnabled,
     isGhost: t.isGhost,
     games: t._count.homeGames + t._count.awayGames,
@@ -86,7 +87,12 @@ export default async function ManageTeamsPage({
           Combine an accidental duplicate (e.g. an auto-created “unverified” team and the one you
           added) into a single team. Games move over and duplicate matchups are removed.
         </p>
-        <MergeForm teams={rows.map((r) => ({ id: r.id, label: `${r.name}${r.isGhost ? " (unverified)" : ""} · ${r.games}g` }))} />
+        <MergeForm
+          teams={rows.map((r) => ({
+            id: r.id,
+            label: `${r.name}${r.isGhost ? " (unverified)" : ""} · ${r.city ?? "no loc"} · ${r.games}g`,
+          }))}
+        />
       </div>
 
       <div className="space-y-3">

@@ -119,31 +119,37 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
     where: { id: teamId },
     select: { needsEnrichment: true, name: true, city: true, ageGroup: true },
   });
-  if (!t?.needsEnrichment) return;
+  if (!t) return;
 
   const header = parseTeamHeader(bodyText);
-  if (!header.name) return; // error page / couldn't parse — try again next run
 
-  const ageGroup = (t.ageGroup ?? header.ageGroup) as AgeGroup | null;
-  const slug = await uniqueSlug(teamSlug(header.name, header.ageGroup), teamId);
+  // Always backfill missing location/age from the team's OWN page (every scrape),
+  // so the whole population gets cities filled in over time. Never overwrite
+  // values already set, and never infer age from opponents.
+  const data: Record<string, unknown> = {};
+  if (!t.city && header.city) data.city = header.city;
+  if (!t.ageGroup && header.ageGroup) data.ageGroup = header.ageGroup as AgeGroup;
 
-  await prisma.team.update({
-    where: { id: teamId },
-    data: {
-      name: header.name,
-      city: t.city ?? header.city ?? undefined,
-      ageGroup: ageGroup ?? undefined,
-      slug,
-      needsEnrichment: false,
-    },
-  });
-  console.log(`[scrape] enriched ${teamId} → "${header.name}"`);
+  // Full enrichment of a quick-added stub: set the real name + slug, clear flag.
+  const doFullEnrich = t.needsEnrichment && !!header.name;
+  if (doFullEnrich) {
+    data.name = header.name;
+    data.slug = await uniqueSlug(teamSlug(header.name!, header.ageGroup ?? t.ageGroup), teamId);
+    data.needsEnrichment = false;
+  }
 
-  // Collapse a duplicate ghost (created from an opponent's schedule) into this team.
-  const promo = await findPromotableTeam(header.name, header.ageGroup);
-  if (promo && promo.id !== teamId) {
-    await mergeTeams(promo.id, teamId);
-    console.log(`[scrape] merged ghost "${promo.name}" into ${teamId}`);
+  if (Object.keys(data).length > 0) {
+    await prisma.team.update({ where: { id: teamId }, data });
+    if (doFullEnrich) console.log(`[scrape] enriched ${teamId} → "${header.name}"`);
+  }
+
+  // After naming a stub, collapse a duplicate ghost (an old opponent) into it.
+  if (doFullEnrich) {
+    const promo = await findPromotableTeam(header.name!, header.ageGroup ?? t.ageGroup);
+    if (promo && promo.id !== teamId) {
+      await mergeTeams(promo.id, teamId);
+      console.log(`[scrape] merged ghost "${promo.name}" into ${teamId}`);
+    }
   }
 }
 
