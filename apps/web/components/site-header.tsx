@@ -4,6 +4,7 @@ const NAV = [
   { href: "/", label: "Ratings" },
   { href: "/pools", label: "Pool Generator" },
   { href: "/scrimmages", label: "Scrimmages" },
+  { href: "/map", label: "Map" },
   { href: "/submit-team", label: "Add Team" },
   { href: "/about", label: "About" },
   { href: "/account", label: "Coaches" },
