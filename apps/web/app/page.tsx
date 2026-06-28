@@ -3,6 +3,7 @@ import { getRatings } from "@/lib/queries";
 import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
 import { ProvisionalBadge, GhostBadge } from "@/components/badges";
 import { TeamMedallion } from "@/components/team-medallion";
+import { ScrimmageFinderCard } from "@/components/scrimmage-finder-card";
 import { teamMedallion } from "@/lib/medallion";
 import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
@@ -61,6 +62,10 @@ export default async function HomePage({
   return (
     <div>
       <Hero />
+
+      <section className="mx-auto max-w-6xl px-4 pt-8">
+        <ScrimmageFinderCard />
+      </section>
 
       <section className="mx-auto max-w-6xl px-4 py-8">
         <FilterBar
