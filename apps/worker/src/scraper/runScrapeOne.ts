@@ -9,7 +9,7 @@ import { prisma } from "@nbr/db";
 import { launchBrowser, newContext } from "./browser.js";
 import { scrapeTeam } from "./scrapeTeam.js";
 import { runRecompute } from "../ratings/runRecompute.js";
-import { envBool, jitterDelay } from "../util.js";
+import { envBool, envNum, jitterDelay } from "../util.js";
 
 async function maybeRecompute(reason: string): Promise<void> {
   if (!envBool("SCRAPE_THEN_RECOMPUTE", true)) {
@@ -92,7 +92,10 @@ export async function runScrapeNew(): Promise<void> {
         console.warn("[scrape-new] BLOCKED — ending early.");
         break;
       }
-      if (t !== teams[teams.length - 1]) await jitterDelay(10, 30);
+      // Polite delay between teams, tunable for faster one-off bulk loads.
+      if (t !== teams[teams.length - 1]) {
+        await jitterDelay(envNum("SCRAPER_MIN_DELAY_SEC", 10), envNum("SCRAPER_MAX_DELAY_SEC", 30));
+      }
     }
   } finally {
     await browser.close();

@@ -8,6 +8,30 @@ import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
 export const revalidate = 3600; // ISR: static-fast, refreshed hourly
 
+const DEFAULT_DIVISION = "14U";
+
+/**
+ * Resolve the single division to show. Accepts a `division` token ("14U" for an
+ * age group, "v:3A" for a varsity class), falls back to legacy ?age/?class
+ * links, and defaults to 14U. The public list is never a mixed cross-age view.
+ */
+function resolveDivision(sp: Record<string, string | undefined>): {
+  kind: "age" | "class";
+  value: string;
+  token: string;
+} {
+  const raw = sp.division || (sp.class ? `v:${sp.class}` : sp.age) || DEFAULT_DIVISION;
+  if (raw.startsWith("v:")) {
+    const cls = raw.slice(2);
+    if ((CLASSIFICATIONS as readonly string[]).includes(cls)) {
+      return { kind: "class", value: cls, token: `v:${cls}` };
+    }
+  } else if ((AGE_GROUPS as readonly string[]).includes(raw)) {
+    return { kind: "age", value: raw, token: raw };
+  }
+  return { kind: "age", value: DEFAULT_DIVISION, token: DEFAULT_DIVISION };
+}
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -15,8 +39,11 @@ export default async function HomePage({
 }) {
   const sp = await searchParams;
   const search = sp.q?.trim() || undefined;
-  const ageGroup = sp.age || undefined;
-  const classification = sp.class || undefined;
+  // The public ratings always show a single division (one age group or one
+  // varsity class) — never a mixed cross-age list. Default to 14U.
+  const division = resolveDivision(sp);
+  const ageGroup = division.kind === "age" ? division.value : undefined;
+  const classification = division.kind === "class" ? division.value : undefined;
   const includeProvisional = sp.prov === "1";
   const sort = (sp.sort as "rating" | "name" | "games") || "rating";
   const page = Number(sp.page) || 1;
@@ -38,15 +65,15 @@ export default async function HomePage({
       <section className="mx-auto max-w-6xl px-4 py-8">
         <FilterBar
           search={search}
-          ageGroup={ageGroup}
-          classification={classification}
+          division={division.token}
           includeProvisional={includeProvisional}
           sort={sort}
         />
 
         <p className="mb-3 mt-6 text-sm text-slate-500">
           {total.toLocaleString()} ranked team{total === 1 ? "" : "s"}
-          {ageGroup ? ` · ${ageGroupLabel(ageGroup)}` : ""}
+          {" · "}
+          {classification ? `Varsity ${classification}` : ageGroupLabel(ageGroup)}
           {search ? ` · matching “${search}”` : ""}
         </p>
 
@@ -153,14 +180,12 @@ function Hero() {
 
 function FilterBar({
   search,
-  ageGroup,
-  classification,
+  division,
   includeProvisional,
   sort,
 }: {
   search?: string;
-  ageGroup?: string;
-  classification?: string;
+  division: string;
   includeProvisional: boolean;
   sort: string;
 }) {
@@ -179,29 +204,24 @@ function FilterBar({
         />
       </div>
       <div>
-        <label className="label" htmlFor="class">
-          Classification <span className="font-normal text-slate-400">(varsity)</span>
+        <label className="label" htmlFor="division">
+          Division
         </label>
-        <select id="class" name="class" defaultValue={classification ?? ""} className="input">
-          <option value="">All</option>
-          {CLASSIFICATIONS.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="label" htmlFor="age">
-          Age group <span className="font-normal text-slate-400">(youth)</span>
-        </label>
-        <select id="age" name="age" defaultValue={ageGroup ?? ""} className="input">
-          <option value="">All</option>
-          {AGE_GROUPS.map((a) => (
-            <option key={a} value={a}>
-              {ageGroupLabel(a)}
-            </option>
-          ))}
+        <select id="division" name="division" defaultValue={division} className="input">
+          <optgroup label="Youth (age group)">
+            {AGE_GROUPS.map((a) => (
+              <option key={a} value={a}>
+                {ageGroupLabel(a)}
+              </option>
+            ))}
+          </optgroup>
+          <optgroup label="High school (varsity)">
+            {CLASSIFICATIONS.map((c) => (
+              <option key={c} value={`v:${c}`}>
+                Varsity {c}
+              </option>
+            ))}
+          </optgroup>
         </select>
       </div>
       <div>
