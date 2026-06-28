@@ -7,6 +7,7 @@ import { logoutUserAction } from "@/lib/account-actions";
 import { respondScrimmageRequestAction, cancelScrimmageRequestAction } from "@/lib/scrimmage-actions";
 import { respondTournamentInviteAction } from "@/lib/tournament-actions";
 import { ScrimmageSettings } from "@/components/account/scrimmage-settings";
+import { TeamWebsiteForm } from "@/components/account/team-website-form";
 import { TdRequestForm } from "@/components/account/td-request";
 import { RolloverPrompt } from "@/components/account/rollover-prompt";
 import { getCurrentSeasonYear } from "@/lib/season";
@@ -227,6 +228,7 @@ export default async function AccountPage() {
                   maxDistanceMiles={c.team.scrimmagePref?.maxDistanceMiles ?? null}
                   notes={c.team.scrimmagePref?.notes ?? null}
                 />
+                <TeamWebsiteForm teamId={c.team.id} website={c.team.website} />
               </li>
             ))}
           </ul>

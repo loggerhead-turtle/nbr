@@ -102,6 +102,10 @@ model Team {
   // host city instead of the team's home), and geocoding is skipped.
   locationLocked Boolean @default(false)
 
+  // Team's own external website (optional). The GameChanger page is derived from
+  // gcTeamId; season-to-season website history comes from the succession chain.
+  website   String?
+
   isActive Boolean @default(true)
   // Ghost teams are opponents auto-created from scraped games before an admin
   // has formally added/enriched them. They still contribute to ratings.

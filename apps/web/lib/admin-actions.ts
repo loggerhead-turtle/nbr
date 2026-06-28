@@ -12,6 +12,7 @@ import {
   AGE_GROUPS,
   CLASSIFICATIONS,
   geocodeCity,
+  normalizeWebsiteUrl,
 } from "@nbr/core";
 import { AGE_OFFSET_KEY, clampAgeStep } from "./age-offset";
 import { findPromotableTeam, mergeTeams } from "./teams";
@@ -351,6 +352,12 @@ export async function updateTeamAction(
     }
   }
 
+  // Optional admin website edit (only when the form includes a website field).
+  const websiteData: Record<string, unknown> = {};
+  if (formData.has("website")) {
+    websiteData.website = normalizeWebsiteUrl(String(formData.get("website") ?? ""));
+  }
+
   try {
     await prisma.team.update({
       where: { id },
@@ -361,6 +368,7 @@ export async function updateTeamAction(
         ageGroup: ageGroup as never,
         classification,
         ...locationData,
+        ...websiteData,
         // Reset scrape bookkeeping so a corrected ID gets re-scraped promptly.
         lastScrapedAt: null,
         nextScrapeAfter: null,
