@@ -11,6 +11,7 @@ import { runMaxPreps } from "./scraper/runMaxPreps.js";
 import { runGeocode } from "./scraper/runGeocode.js";
 import { runRecompute } from "./ratings/runRecompute.js";
 import { runBacktest } from "./ratings/runBacktest.js";
+import { runFindBadMerges } from "./maintenance/findBadMerges.js";
 
 async function main() {
   const command = process.argv[2];
@@ -31,8 +32,13 @@ async function main() {
     case "backtest":
       await runBacktest();
       break;
+    case "find-bad-merges":
+      await runFindBadMerges(process.argv.slice(3));
+      break;
     default:
-      console.error("Usage: node src/index.ts <scrape|maxpreps|geocode|recompute|backtest>");
+      console.error(
+        "Usage: node src/index.ts <scrape|maxpreps|geocode|recompute|backtest|find-bad-merges>",
+      );
       process.exitCode = 1;
   }
 }
