@@ -27,7 +27,7 @@ export const RATING_ALGORITHMS = [
     id: "bt-age-v1",
     label: "Bradley-Terry · age-normalized",
     description:
-      "Unified cross-age scale: every age group sits on one developmental curve, so an average 16U team ranks above an average 8U team. Recommended.",
+      "Unified cross-age scale: every age group sits on one developmental curve, so an average 16U team rates above an average 8U team. Recommended.",
   },
   {
     id: "bt-mov-v1",

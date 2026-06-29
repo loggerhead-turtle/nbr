@@ -16,6 +16,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Terminology guard: the site uses "rating", never "ranking". Fail if
+      # "ranking"/"rankings"/"ranked" appears anywhere under apps/web (see
+      # CLAUDE.md). Use "rating"/"rated"/"sorted"/"ordered" instead.
+      - name: No "ranking" in the website
+        run: |
+          if grep -rinE '\b(ranking|rankings|ranked)\b' apps/web \
+               --include='*.ts' --include='*.tsx' --include='*.css' \
+               --include='*.md' --include='*.json'; then
+            echo "::error::Use 'rating'/'sorted'/'ordered' — never 'ranking'/'ranked' — in apps/web (see CLAUDE.md)."
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22

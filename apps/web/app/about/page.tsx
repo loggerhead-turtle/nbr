@@ -49,7 +49,7 @@ export default function AboutPage() {
 
       <Section title="Confidence & provisional ratings">
         Teams with only a handful of games are shown as <em>Provisional</em> and treated
-        cautiously (and kept out of the default ranking) until there’s enough data to be
+        cautiously (and kept out of the default ratings) until there’s enough data to be
         confident. Every team also carries a confidence level based on how much it has played.
       </Section>
 

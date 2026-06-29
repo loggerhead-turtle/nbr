@@ -5,7 +5,7 @@ import { geocodeCity, haversineMiles } from "@nbr/core";
 /**
  * Team typeahead/search. Used by the pool generator and the tournament-director
  * team-finder. Supports name search plus optional rating min/max and a "near"
- * city for distance-ranked results. Never returns scraped ghost opponents.
+ * city for distance-ordered results. Never returns scraped ghost opponents.
  */
 export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     orderBy: { rating: { rating: "desc" } },
   });
 
-  // Distance ranking when a "near" city is given and resolvable.
+  // Distance ordering when a "near" city is given and resolvable.
   const origin = near ? geocodeCity(near, nearState) : null;
 
   const rows = teams.map((t) => {
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
     out = rows.filter((r) => r.distanceMiles != null && r.distanceMiles <= maxMiles);
   }
 
-  // When ranking by distance, located teams first (nearest), then the rest.
+  // When ordering by distance, located teams first (nearest), then the rest.
   if (origin) {
     out = [...out].sort(
       (a, b) =>
