@@ -38,11 +38,19 @@ export async function runRecompute(): Promise<void> {
   console.log(`[recompute] started run ${run.id} (algorithm=${algorithm})`);
 
   try {
+    // Only rate VERIFIED games: both teams must be real (non-ghost). Ghost teams
+    // are auto-created, unconfirmed opponents, so their games aren't trustworthy
+    // and must not influence ratings.
+    const baseWhere = {
+      status: "FINAL" as const,
+      homeScore: { not: null },
+      awayScore: { not: null },
+    };
     const games = await prisma.game.findMany({
       where: {
-        status: "FINAL",
-        homeScore: { not: null },
-        awayScore: { not: null },
+        ...baseWhere,
+        homeTeam: { isGhost: false },
+        awayTeam: { isGhost: false },
       },
       select: {
         homeTeamId: true,
@@ -54,6 +62,11 @@ export async function runRecompute(): Promise<void> {
       },
       orderBy: { playedAt: "asc" },
     });
+    const totalFinal = await prisma.game.count({ where: baseWhere });
+    console.log(
+      `[recompute] using ${games.length} verified games ` +
+        `(excluded ${totalFinal - games.length} involving ghost teams)`,
+    );
 
     const engineGames: EngineGame[] = games.map((g) => ({
       homeTeamId: g.homeTeamId,
