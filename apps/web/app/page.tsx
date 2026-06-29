@@ -97,7 +97,7 @@ export default async function HomePage({
                   <th className="px-4 py-3">Team</th>
                   <th className="px-4 py-3">Class / Age</th>
                   <th className="px-4 py-3 text-right">Record</th>
-                  <th className="px-4 py-3 text-right">Rating</th>
+                  <th className="px-4 py-3 text-right">NBR</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -178,6 +178,9 @@ function Hero() {
         <div className="mt-6 flex flex-wrap gap-3">
           <Link href="/pools" className="btn-accent">
             Generate Tournament Pools
+          </Link>
+          <Link href="/demo/td" className="btn-accent">
+            Tournament Director Demo
           </Link>
           <Link href="/scrimmages" className="btn-accent">
             Find a Scrimmage
