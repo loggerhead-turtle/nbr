@@ -60,17 +60,17 @@ export function RatingsTable({
 
   return (
     <>
-      <div className="mb-2 flex items-center gap-1 sm:hidden">
-        <span className="pr-1 text-xs text-slate-400">Show:</span>
+      {/* Mobile-only: prominent accent buttons (like the Generate Pools / Find a
+          Scrimmage buttons) to swap which metric column is shown. */}
+      <div className="mb-3 flex items-center gap-2 sm:hidden">
+        <span className="shrink-0 text-xs font-medium text-slate-500">Show:</span>
         {(Object.keys(METRIC_LABEL) as Metric[]).map((m) => (
           <button
             key={m}
             type="button"
             onClick={() => setMetric(m)}
             aria-pressed={metric === m}
-            className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-              metric === m ? "bg-navy-900 text-white" : "bg-slate-100 text-navy-800"
-            }`}
+            className={`flex-1 ${metric === m ? "btn-accent" : "btn-ghost"}`}
           >
             {METRIC_LABEL[m]}
           </button>
