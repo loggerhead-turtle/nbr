@@ -1,11 +1,15 @@
-import { getGhostTeamsWithSuggestions } from "@nbr/db";
+import { getGhostTeamsWithSuggestions, countExactNameGhostMatches } from "@nbr/db";
 import { GhostReview } from "@/components/admin/ghost-review";
+import { BulkGhostDelete } from "@/components/admin/bulk-ghost-delete";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ghost teams", robots: { index: false } };
 
 export default async function GhostsPage() {
-  const ghosts = await getGhostTeamsWithSuggestions(80);
+  const [ghosts, exactMatchCount] = await Promise.all([
+    getGhostTeamsWithSuggestions(80),
+    countExactNameGhostMatches(),
+  ]);
   const withMatch = ghosts.filter((g) => g.suggestions.length > 0);
   const orphans = ghosts.filter((g) => g.suggestions.length === 0);
 
@@ -19,6 +23,7 @@ export default async function GhostsPage() {
         games, game-region overlap). Merge into the suggested team, search for a different target, or
         leave it. Merging folds the ghost&rsquo;s games into the real team and deletes the ghost.
       </p>
+      <BulkGhostDelete count={exactMatchCount} />
       <GhostReview withMatch={withMatch} orphans={orphans} />
     </div>
   );
