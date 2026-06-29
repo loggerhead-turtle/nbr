@@ -11,12 +11,15 @@ import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
 export const revalidate = 3600; // ISR: static-fast, refreshed hourly
 
-const DEFAULT_DIVISION = "12U";
+// Must be a valid AGE_GROUPS value ("U12"), not the display label ("12U") —
+// otherwise it matches no option (the filter falls back to the first, 8U) and
+// the query gets an invalid age group and returns nothing.
+const DEFAULT_DIVISION = "U12";
 
 /**
- * Resolve the single division to show. Accepts a `division` token ("14U" for an
+ * Resolve the single division to show. Accepts a `division` token ("U14" for an
  * age group, "v:3A" for a varsity class), falls back to legacy ?age/?class
- * links, and defaults to 14U. The public list is never a mixed cross-age view.
+ * links, and defaults to 12U. The public list is never a mixed cross-age view.
  */
 function resolveDivision(sp: Record<string, string | undefined>): {
   kind: "age" | "class";
@@ -92,7 +95,7 @@ export default async function HomePage({
   const sp = await searchParams;
   const search = sp.q?.trim() || undefined;
   // The public ratings always show a single division (one age group or one
-  // varsity class) — never a mixed cross-age list. Default to 14U.
+  // varsity class) — never a mixed cross-age list. Default to 12U.
   const division = resolveDivision(sp);
   const ageGroup = division.kind === "age" ? division.value : undefined;
   const classification = division.kind === "class" ? division.value : undefined;
