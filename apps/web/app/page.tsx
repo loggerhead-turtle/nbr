@@ -87,7 +87,7 @@ export default async function HomePage({
         />
 
         <p className="mb-3 mt-6 text-sm text-slate-500">
-          {total.toLocaleString()} ranked team{total === 1 ? "" : "s"}
+          {total.toLocaleString()} rated team{total === 1 ? "" : "s"}
           {" · "}
           {classification ? `Varsity ${classification}` : ageGroupLabel(ageGroup)}
           {search ? ` · matching “${search}”` : ""}
@@ -137,7 +137,7 @@ function Hero() {
 function EmptyState() {
   return (
     <div className="card p-10 text-center">
-      <p className="text-lg font-semibold text-navy-900">No ranked teams yet</p>
+      <p className="text-lg font-semibold text-navy-900">No rated teams yet</p>
       <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
         Ratings appear once teams have played enough games. Know a team that should be
         here?{" "}

@@ -11,7 +11,7 @@ export const metadata = { title: "Age offset (experimental)", robots: { index: f
  * Admin-only control + visualization of the cross-age rating offset. Each age
  * group's rating is shifted by the saved step (points per age year, 14U = 0) so
  * older teams sort above younger ones. The step is persisted in AppSetting and
- * editable here; saving re-renders the combined ranking so you can watch the
+ * editable here; saving re-renders the combined ratings so you can watch the
  * effect. Display-only — it does not change stored ratings or the public site.
  */
 export default async function AgeOffsetPage({
@@ -54,9 +54,9 @@ export default async function AgeOffsetPage({
 
   return (
     <div>
-      <h1 className="text-2xl font-black text-navy-900">Cross-age ranking (experimental)</h1>
+      <h1 className="text-2xl font-black text-navy-900">Cross-age ratings (experimental)</h1>
       <p className="mt-2 max-w-2xl text-sm text-slate-600">
-        Combined ranking across age groups, shifting each age group by{" "}
+        Combined ratings across age groups, shifting each age group by{" "}
         <strong>{step}</strong> points per age year (14U = 0). The value is saved and used as the
         canonical offset; this is a backstage view to validate it before exposing — it does{" "}
         <strong>not</strong> change stored ratings or the public ratings page.

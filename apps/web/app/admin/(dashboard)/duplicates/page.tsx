@@ -11,7 +11,7 @@ export default async function DuplicatesPage() {
     <div>
       <h1 className="mb-1 text-2xl font-black text-navy-900">Possible duplicates</h1>
       <p className="mb-6 max-w-2xl text-sm text-slate-500">
-        Teams that look like the same club, ranked by a <strong>confidence heat map</strong> that
+        Teams that look like the same club, ordered by a <strong>confidence heat map</strong> that
         weighs name, age, city/state, coaching staff, shared games, and game-region overlap. Green
         is a near-certain match; amber/red need a closer look. Each card lists the reasons for and
         against, links to both <strong>GameChanger</strong> pages, and shows both rosters side by

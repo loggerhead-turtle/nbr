@@ -19,7 +19,7 @@ export default function TermsPage() {
 
       <h2>1. The Service</h2>
       <p>
-        The Service provides statistical ratings and rankings of amateur baseball teams, a
+        The Service provides statistical ratings of amateur baseball teams, a
         tournament pool-generation tool, and related features. Ratings are computed estimates
         derived from publicly available game results and information submitted by users. The
         Service is provided for general informational and entertainment purposes only.
@@ -36,7 +36,7 @@ export default function TermsPage() {
 
       <h2>3. Accuracy; No Warranties</h2>
       <p>
-        THE SERVICE, INCLUDING ALL RATINGS, RANKINGS, RECORDS, AND POOL ASSIGNMENTS, IS PROVIDED
+        THE SERVICE, INCLUDING ALL RATINGS, RECORDS, AND POOL ASSIGNMENTS, IS PROVIDED
         “AS IS” AND “AS AVAILABLE” WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, OR
         STATUTORY, INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES OF MERCHANTABILITY,
         FITNESS FOR A PARTICULAR PURPOSE, TITLE, ACCURACY, OR NON-INFRINGEMENT.
