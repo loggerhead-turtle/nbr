@@ -35,6 +35,55 @@ function resolveDivision(sp: Record<string, string | undefined>): {
   return { kind: "age", value: DEFAULT_DIVISION, token: DEFAULT_DIVISION };
 }
 
+const SORT_LABELS: Record<string, string> = {
+  games: "games played",
+  rating: "rating (high to low)",
+  name: "team name (A–Z)",
+};
+
+/** Build a homepage URL with one query param changed, resetting pagination. */
+function withParam(sp: Record<string, string | undefined>, key: string, value: string): string {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (v && k !== "page" && k !== key) params.set(k, v);
+  }
+  params.set(key, value);
+  return `/?${params.toString()}`;
+}
+
+/** A clickable column header that sorts the table by `col`. */
+function SortHeader({
+  label,
+  col,
+  sort,
+  sp,
+  align,
+}: {
+  label: string;
+  col: "name" | "games" | "rating";
+  sort: string;
+  sp: Record<string, string | undefined>;
+  align?: "right";
+}) {
+  const active = sort === col;
+  return (
+    <th className={`px-4 py-3 ${align === "right" ? "text-right" : ""}`}>
+      <Link
+        href={withParam(sp, "sort", col)}
+        className={`inline-flex items-center gap-1 hover:text-white ${
+          active ? "text-white" : ""
+        }`}
+        title={`Sort by ${SORT_LABELS[col]}`}
+      >
+        {label}
+        <span aria-hidden className={active ? "" : "opacity-30"}>
+          {active ? (col === "name" ? "▲" : "▼") : "↕"}
+        </span>
+      </Link>
+    </th>
+  );
+}
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -48,7 +97,7 @@ export default async function HomePage({
   const ageGroup = division.kind === "age" ? division.value : undefined;
   const classification = division.kind === "class" ? division.value : undefined;
   const includeProvisional = sp.prov === "1";
-  const sort = (sp.sort as "rating" | "name" | "games") || "name";
+  const sort = (sp.sort as "rating" | "name" | "games") || "games";
   const page = Number(sp.page) || 1;
   const liveSearch = await getLiveSearchEnabled();
 
@@ -84,6 +133,8 @@ export default async function HomePage({
           {" · "}
           {classification ? `Varsity ${classification}` : ageGroupLabel(ageGroup)}
           {search ? ` · matching “${search}”` : ""}
+          {" · "}
+          <span className="text-slate-400">Sorted by {SORT_LABELS[sort]}</span>
         </p>
 
         {rows.length === 0 ? (
@@ -93,25 +144,21 @@ export default async function HomePage({
             <table className="w-full text-left text-sm">
               <thead className="bg-navy-900 text-xs uppercase tracking-wide text-navy-100">
                 <tr>
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Team</th>
+                  <SortHeader label="Team" col="name" sort={sort} sp={sp} />
                   <th className="px-4 py-3">Class / Age</th>
+                  <SortHeader label="Games" col="games" sort={sort} sp={sp} align="right" />
                   <th className="px-4 py-3 text-right">Record</th>
-                  <th className="px-4 py-3 text-right">Rating</th>
+                  <SortHeader label="Rating" col="rating" sort={sort} sp={sp} align="right" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((r, i) => {
-                  const rank = !includeProvisional ? (page - 1) * 50 + i + 1 : null;
+                {rows.map((r) => {
                   const tier = teamMedallion({
                     isGhost: r.isGhost,
                     hasApprovedClaim: r.hasApprovedClaim,
                   });
                   return (
                     <tr key={r.teamId} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-semibold text-slate-400">
-                        {rank ?? "—"}
-                      </td>
                       <td className="px-4 py-3">
                         <span className="flex items-center gap-1.5">
                           <Link
@@ -140,6 +187,9 @@ export default async function HomePage({
                       </td>
                       <td className="px-4 py-3 text-slate-600">
                         {r.classification ? `Varsity ${r.classification}` : ageGroupLabel(r.ageGroup)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                        {r.gamesPlayed}
                       </td>
                       <td className="px-4 py-3 text-right tabular-nums text-slate-600">
                         {formatRecord(r.wins, r.losses, r.ties)}
