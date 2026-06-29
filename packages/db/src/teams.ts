@@ -307,6 +307,89 @@ export async function countGhostTeams(): Promise<number> {
   return prisma.team.count({ where: { isGhost: true } });
 }
 
+/** Normalize a name for EXACT display matching (keeps the age token, unlike the
+ * scraper normalizer): lowercase, strip diacritics/punctuation, collapse spaces. */
+function displayNorm(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export interface ExactGhostMatch {
+  ghostId: string;
+  ghostName: string;
+  targetId: string;
+  targetName: string;
+  targetGcTeamId: string | null;
+}
+
+/**
+ * Find ghost teams whose name EXACTLY matches a single verified team (one with a
+ * GameChanger ID). Age is implicitly matched because the full name — including
+ * the "10U"/"14U" token — must match, so "Riverdawgs 10U" never collapses into
+ * "Riverdawgs 11U". Ambiguous cases (2+ verified teams of the same exact name,
+ * e.g. the same club name in two regions) are skipped, not guessed.
+ */
+export async function findExactNameGhostMatches(): Promise<ExactGhostMatch[]> {
+  const [ghosts, verified] = await Promise.all([
+    prisma.team.findMany({ where: { isGhost: true }, select: { id: true, name: true } }),
+    prisma.team.findMany({
+      where: { gcTeamId: { not: null } },
+      select: { id: true, name: true, gcTeamId: true },
+    }),
+  ]);
+
+  const byName = new Map<string, { id: string; name: string; gcTeamId: string | null }[]>();
+  for (const v of verified) {
+    const key = displayNorm(v.name);
+    if (!key) continue;
+    (byName.get(key) ?? byName.set(key, []).get(key)!).push(v);
+  }
+
+  const out: ExactGhostMatch[] = [];
+  for (const g of ghosts) {
+    const matches = byName.get(displayNorm(g.name));
+    if (matches && matches.length === 1) {
+      out.push({
+        ghostId: g.id,
+        ghostName: g.name,
+        targetId: matches[0]!.id,
+        targetName: matches[0]!.name,
+        targetGcTeamId: matches[0]!.gcTeamId,
+      });
+    }
+  }
+  return out;
+}
+
+/** Count exact-name ghost→verified matches (for the admin button label). */
+export async function countExactNameGhostMatches(): Promise<number> {
+  return (await findExactNameGhostMatches()).length;
+}
+
+/**
+ * DELETE every ghost whose exact name matches a single verified (GameChanger)
+ * team. The ghost — and its games, via the DB's ON DELETE CASCADE — is removed;
+ * the verified team is untouched. We delete rather than merge on purpose: the
+ * verified team already holds the authoritative games from its own scrape, so
+ * folding the ghost's opponent-perspective copies back in just re-creates
+ * duplicate games. Returns how many ghosts were deleted.
+ */
+export async function deleteExactNameGhosts(): Promise<{
+  deleted: number;
+  matches: ExactGhostMatch[];
+}> {
+  const matches = await findExactNameGhostMatches();
+  const ids = matches.map((m) => m.ghostId);
+  if (ids.length > 0) {
+    await prisma.team.deleteMany({ where: { id: { in: ids } } });
+  }
+  return { deleted: ids.length, matches };
+}
+
 /**
  * Merge `sourceId` into `targetId`: reassign games, transfer a GameChanger ID and
  * any missing fields, drop self-games and duplicate matchups, delete the source.

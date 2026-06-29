@@ -9,6 +9,7 @@ import {
   GameStatus,
   findCrossAgeMergeArtifacts,
   repairCrossAgeMerge,
+  deleteExactNameGhosts,
 } from "@nbr/db";
 import {
   createTeamSchema,
@@ -465,6 +466,21 @@ export async function mergeGhostAction(formData: FormData): Promise<void> {
   if (!ghostId || !targetId || ghostId === targetId) return;
   // The ghost (source) folds into the real team (target), which keeps its id.
   await mergeTeams(ghostId, targetId);
+  revalidatePath("/admin/ghosts");
+  revalidatePath("/admin/duplicates");
+  revalidatePath("/admin/teams");
+  revalidatePath("/");
+}
+
+/**
+ * Bulk-delete every ghost whose exact name matches a single verified (GameChanger)
+ * team — the ghost and its (duplicate) games are removed; the verified team is
+ * kept. Recompute afterward since the game graph changed.
+ */
+export async function deleteExactNameGhostsAction(): Promise<void> {
+  await requireAdmin();
+  const { deleted } = await deleteExactNameGhosts();
+  if (deleted > 0) await triggerRecompute();
   revalidatePath("/admin/ghosts");
   revalidatePath("/admin/duplicates");
   revalidatePath("/admin/teams");
