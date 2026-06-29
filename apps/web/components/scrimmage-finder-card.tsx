@@ -26,7 +26,9 @@ interface Filters {
   maxMiles: string;
 }
 
-const EMPTY: Filters = { ageGroup: "14U", ratingMin: "", ratingMax: "", near: "", maxMiles: "" };
+// ageGroup must be an AGE_GROUPS value ("U14"), not the display label ("14U"),
+// or the <select> shows "Any" while the search silently filters by 14U.
+const EMPTY: Filters = { ageGroup: "U14", ratingMin: "", ratingMax: "", near: "", maxMiles: "" };
 const LS_KEY = "nbr.scrimmageFilters";
 
 /**

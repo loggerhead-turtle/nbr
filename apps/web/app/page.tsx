@@ -61,16 +61,18 @@ function SortHeader({
   sort,
   sp,
   align,
+  className = "",
 }: {
   label: string;
   col: "name" | "games" | "rating";
   sort: string;
   sp: Record<string, string | undefined>;
   align?: "right";
+  className?: string;
 }) {
   const active = sort === col;
   return (
-    <th className={`px-4 py-3 ${align === "right" ? "text-right" : ""}`}>
+    <th className={`px-3 py-3 sm:px-4 ${align === "right" ? "text-right" : ""} ${className}`}>
       <Link
         href={withParam(sp, "sort", col)}
         className={`inline-flex items-center gap-1 hover:text-white ${
@@ -143,14 +145,21 @@ export default async function HomePage({
         {rows.length === 0 ? (
           <EmptyState />
         ) : (
-          <div className="card overflow-hidden">
+          <div className="card overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-navy-900 text-xs uppercase tracking-wide text-navy-100">
                 <tr>
                   <SortHeader label="Team" col="name" sort={sort} sp={sp} />
-                  <th className="px-4 py-3">Class / Age</th>
-                  <SortHeader label="Games" col="games" sort={sort} sp={sp} align="right" />
-                  <th className="px-4 py-3 text-right">Record</th>
+                  <th className="hidden px-3 py-3 sm:px-4 md:table-cell">Class / Age</th>
+                  <SortHeader
+                    label="GP"
+                    col="games"
+                    sort={sort}
+                    sp={sp}
+                    align="right"
+                    className="hidden sm:table-cell"
+                  />
+                  <th className="hidden px-3 py-3 text-right sm:table-cell sm:px-4">Record</th>
                   <SortHeader label="Rating" col="rating" sort={sort} sp={sp} align="right" />
                 </tr>
               </thead>
@@ -162,8 +171,8 @@ export default async function HomePage({
                   });
                   return (
                     <tr key={r.teamId} className="hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <span className="flex items-center gap-1.5">
+                      <td className="px-3 py-3 sm:px-4">
+                        <span className="flex flex-wrap items-center gap-1.5">
                           <Link
                             href={`/teams/${r.slug}`}
                             className={`font-semibold hover:underline ${
@@ -182,22 +191,27 @@ export default async function HomePage({
                             </Link>
                           )}
                         </span>
-                        <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
                           {r.city ? <span>{r.city}, {r.state}</span> : <span>{r.state}</span>}
+                          {/* Division is hidden as its own column on mobile; show it inline there. */}
+                          <span className="md:hidden">
+                            ·{" "}
+                            {r.classification ? `Varsity ${r.classification}` : ageGroupLabel(r.ageGroup)}
+                          </span>
                           {r.isProvisional && <ProvisionalBadge />}
                           {r.isGhost && <GhostBadge />}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-slate-600">
+                      <td className="hidden px-3 py-3 text-slate-600 sm:px-4 md:table-cell">
                         {r.classification ? `Varsity ${r.classification}` : ageGroupLabel(r.ageGroup)}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                      <td className="hidden px-3 py-3 text-right tabular-nums text-slate-600 sm:table-cell sm:px-4">
                         {r.gamesPlayed}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                      <td className="hidden px-3 py-3 text-right tabular-nums text-slate-600 sm:table-cell sm:px-4">
                         {formatRecord(r.wins, r.losses, r.ties)}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-3 py-3 text-right sm:px-4">
                         <span className="text-lg font-bold tabular-nums text-navy-900">
                           {formatRating(r.rating)}
                         </span>
