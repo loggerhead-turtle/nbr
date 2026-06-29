@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { TdDataPort } from "./td-port";
 import type { TdTournament, TdUmpire } from "./types";
 
@@ -39,8 +39,6 @@ export function TdProvider({ port, children }: { port: TdDataPort; children: Rea
   const [umpires, setUmpires] = useState<TdUmpire[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<TdTab>("dashboard");
-  const selectedRef = useRef<string | null>(null);
-  selectedRef.current = selectedId;
 
   const refresh = useCallback(async () => {
     const [ts, us] = await Promise.all([port.listTournaments(), port.listUmpires()]);
@@ -69,10 +67,20 @@ export function TdProvider({ port, children }: { port: TdDataPort; children: Rea
     [port, refresh],
   );
 
+  // Changing the selected tournament doesn't change which tab you're on (so the
+  // tournament picker keeps you on the same view); clearing returns to dashboard.
   const select = useCallback((id: string | null) => {
     setSelectedId(id);
-    setTab(id ? "build" : "dashboard");
+    if (!id) setTab("dashboard");
   }, []);
+
+  // Always keep a tournament selected when any exist, so the per-tournament tabs
+  // are usable immediately (and after a tournament is deleted or the demo reset).
+  useEffect(() => {
+    if (loading || tournaments.length === 0) return;
+    const exists = selectedId && tournaments.some((t) => t.id === selectedId);
+    if (!exists) setSelectedId(tournaments[0]!.id);
+  }, [loading, tournaments, selectedId]);
 
   const selected = useMemo(
     () => tournaments.find((t) => t.id === selectedId) ?? null,

@@ -3,6 +3,7 @@
 import { useState, useRef, useTransition, useEffect, useCallback } from "react";
 import { inviteTeamAction } from "@/lib/tournament-actions";
 import { TeamMedallion } from "@/components/team-medallion";
+import { formatRating } from "@/lib/format";
 
 interface Hit {
   id: string;
@@ -126,7 +127,7 @@ export function InviteTeams({
                   <TeamMedallion tier={h.hasApprovedClaim ? "green" : "gray"} />
                   <span className="font-medium text-slate-800">{h.name}</span>
                   {h.city && <span className="text-xs text-slate-400">{h.city}, {h.state}</span>}
-                  {h.rating != null && <span className="tabular-nums text-navy-700">{h.rating}</span>}
+                  {h.rating != null && <span className="tabular-nums text-navy-700">{formatRating(h.rating)}</span>}
                   {h.distanceMiles != null && (
                     <span className="text-xs text-slate-400">~{h.distanceMiles} mi</span>
                   )}

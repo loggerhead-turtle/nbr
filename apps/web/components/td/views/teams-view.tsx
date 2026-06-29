@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTd } from "../lib/td-context";
+import { formatRating } from "@/lib/format";
 import { PaymentPill, SectionTitle, divisionLabel, EmptyCard } from "../lib/ui";
 import { PAYMENT_STATUSES, type PaymentStatus } from "../lib/types";
 import { TeamSearch } from "./team-search";
@@ -77,7 +78,7 @@ function DivisionInvites({ divisionId }: { divisionId: string }) {
                   )}
                   <div className="text-xs text-slate-400">{i.team.city ? `${i.team.city}, ${i.team.state}` : i.team.state}</div>
                 </td>
-                <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-navy-800">{i.team.nbr ?? "—"}</td>
+                <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-navy-800">{i.team.nbr != null ? formatRating(i.team.nbr) : "—"}</td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
                     <PaymentPill status={i.paymentStatus} />

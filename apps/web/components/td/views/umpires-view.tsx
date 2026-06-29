@@ -30,8 +30,6 @@ export function UmpiresView() {
           <UmpireCard key={u.id} umpireId={u.id} />
         ))}
       </div>
-
-      <FeedbackStub />
     </div>
   );
 }
@@ -149,23 +147,3 @@ function RegisterForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-function FeedbackStub() {
-  return (
-    <div className="card border-dashed p-4 opacity-80">
-      <div className="flex items-center gap-2">
-        <h3 className="font-bold text-navy-900">Coach → umpire feedback</h3>
-        <span className="badge bg-slate-200 text-slate-600">coming soon</span>
-      </div>
-      <p className="mt-1 text-sm text-slate-500">
-        A future release will let coaches leave <span className="font-medium">confidential</span> feedback the umpire
-        can see — a 1–5 rating plus a single comment. Previewed here, disabled for now.
-      </p>
-      <div className="mt-3 flex items-center gap-1 opacity-60">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <span key={n} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-sm text-slate-400">{n}</span>
-        ))}
-      </div>
-      <textarea disabled className="input mt-2 bg-slate-50" rows={2} placeholder="One comment to the umpire (confidential)…" />
-    </div>
-  );
-}
