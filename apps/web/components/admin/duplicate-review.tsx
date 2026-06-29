@@ -3,6 +3,18 @@
 import { useState, useTransition } from "react";
 import { mergeTeamAction, dismissDuplicateAction } from "@/lib/admin-actions";
 import type { DupPair, DupTeam, DupGame } from "@/lib/duplicates";
+import type { MergeTier } from "@nbr/core";
+
+const TIER_STYLE: Record<MergeTier, { bar: string; chip: string; label: string }> = {
+  high: { bar: "bg-emerald-600", chip: "bg-emerald-100 text-emerald-800", label: "High confidence" },
+  medium: { bar: "bg-amber-500", chip: "bg-amber-100 text-amber-800", label: "Medium confidence" },
+  low: { bar: "bg-rose-500", chip: "bg-rose-100 text-rose-800", label: "Low confidence" },
+  none: { bar: "bg-slate-400", chip: "bg-slate-200 text-slate-700", label: "Not a match" },
+};
+
+function gcUrl(gcTeamId: string): string {
+  return `https://web.gc.com/teams/${gcTeamId}/schedule`;
+}
 
 export function DuplicateReview({ initialPairs }: { initialPairs: DupPair[] }) {
   const [pairs, setPairs] = useState(initialPairs);
@@ -55,16 +67,45 @@ export function DuplicateReview({ initialPairs }: { initialPairs: DupPair[] }) {
       {pairs.map((pair) => {
         const key = `${pair.a.id}|${pair.b.id}`;
         const isBusy = pending && busyId === key;
+        const conf = pair.confidence;
+        const style = TIER_STYLE[conf.tier];
         return (
           <div key={key} className={`card overflow-hidden ${isBusy ? "opacity-50" : ""}`}>
-            <div className="flex items-center justify-between bg-navy-900 px-4 py-2 text-sm text-white">
+            {/* Heat-map bar — width + colour encode merge confidence. */}
+            <div className="h-1.5 w-full bg-slate-100">
+              <div className={`h-full ${style.bar}`} style={{ width: `${conf.score}%` }} />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-navy-900 px-4 py-2 text-sm text-white">
               <span className="font-semibold">{pair.a.name}</span>
-              <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs">
-                {pair.commonGames.length > 0
-                  ? `${pair.commonGames.length} shared game${pair.commonGames.length === 1 ? "" : "s"}`
-                  : "no shared games"}
+              <span className="flex items-center gap-2">
+                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${style.chip}`}>
+                  {style.label} · {conf.score}%
+                </span>
+                <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs">
+                  {pair.commonGames.length > 0
+                    ? `${pair.commonGames.length} shared game${pair.commonGames.length === 1 ? "" : "s"}`
+                    : "no shared games"}
+                </span>
               </span>
             </div>
+
+            {(conf.reasons.length > 0 || conf.blockers.length > 0) && (
+              <div className="flex flex-wrap gap-1.5 border-b border-slate-100 bg-slate-50 px-4 py-2">
+                {conf.reasons.map((r, i) => (
+                  <span
+                    key={`r${i}`}
+                    className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700"
+                  >
+                    ✓ {r}
+                  </span>
+                ))}
+                {conf.blockers.map((b, i) => (
+                  <span key={`b${i}`} className="rounded bg-rose-50 px-1.5 py-0.5 text-xs text-rose-700">
+                    ✗ {b}
+                  </span>
+                ))}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-px bg-slate-200 sm:grid-cols-2">
               <TeamSide team={pair.a} role="Keep" />
@@ -135,12 +176,30 @@ function TeamSide({ team, role }: { team: DupTeam; role: "Keep" | "Merge in" }) 
       </div>
       <p className="mt-2 font-semibold text-slate-800">{team.name}</p>
       <p className="text-xs text-slate-500">
-        {team.city ?? "no location"}
+        {team.city ? `${team.city}${team.state ? `, ${team.state}` : ""}` : "no location"}
         {" · "}
         {team.classification ? `Varsity ${team.classification}` : team.ageGroup ?? "unclassified"}
         {" · "}
-        {team.gcTeamId ? `GC ${team.gcTeamId}` : team.isGhost ? "unverified" : "no GC id"}
+        {team.gcTeamId ? (
+          <a
+            href={gcUrl(team.gcTeamId)}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sky-600 underline hover:text-sky-800"
+          >
+            GameChanger ↗
+          </a>
+        ) : team.isGhost ? (
+          "unverified"
+        ) : (
+          "no GC id"
+        )}
       </p>
+      {team.coaches.length > 0 && (
+        <p className="mt-1 truncate text-xs text-slate-400" title={team.coaches.join(", ")}>
+          Staff: {team.coaches.join(", ")}
+        </p>
+      )}
       <ul className="mt-3 space-y-1 text-xs text-slate-600">
         {team.games.slice(0, 8).map((g: DupGame, i) => (
           <li key={i} className="flex justify-between">

@@ -19,6 +19,7 @@ import { AGE_OFFSET_KEY, clampAgeStep } from "./age-offset";
 import { LIVE_SEARCH_KEY } from "./site-settings";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew } from "./render-jobs";
+import type { MergeTargetOption } from "./merge-types";
 import { sendEmail, emailLayout, siteUrl } from "./email";
 import { getCurrentSeasonYear } from "./season";
 import { setRatingAlgorithm } from "./settings";
@@ -448,6 +449,34 @@ export async function setRatingAlgorithmAction(
   await setRatingAlgorithm(algorithm);
   revalidatePath("/admin/settings");
   return { ok: true, message: "Saved. The next rating recompute will use this model." };
+}
+
+/** Merge a ghost team into a chosen real team (Ghost-teams admin page). */
+export async function mergeGhostAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const ghostId = String(formData.get("ghostId") ?? "");
+  const targetId = String(formData.get("targetId") ?? "");
+  if (!ghostId || !targetId || ghostId === targetId) return;
+  // The ghost (source) folds into the real team (target), which keeps its id.
+  await mergeTeams(ghostId, targetId);
+  revalidatePath("/admin/ghosts");
+  revalidatePath("/admin/duplicates");
+  revalidatePath("/admin/teams");
+  revalidatePath("/");
+}
+
+/** Search real (non-ghost) teams to hand-pick a merge target for a ghost. */
+export async function searchMergeTargets(query: string): Promise<MergeTargetOption[]> {
+  await requireAdmin();
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const teams = await prisma.team.findMany({
+    where: { isGhost: false, name: { contains: q, mode: "insensitive" } },
+    select: { id: true, name: true, city: true, ageGroup: true, gcTeamId: true },
+    orderBy: { name: "asc" },
+    take: 15,
+  });
+  return teams;
 }
 
 export async function setUserRoleAction(formData: FormData): Promise<void> {
