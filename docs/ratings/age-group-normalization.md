@@ -152,6 +152,9 @@ All of this reuses the existing backtest harness
   non-age-normalized model is active.
 - No schema change is required: the setting reuses the existing `AppSetting`
   table, and ratings stay in `Rating.rating` on the same display scale.
+- **Verified games only:** the recompute excludes any game involving a **ghost**
+  team (auto-created, unconfirmed opponents) — only real-vs-real games rate.
+  The run logs how many games were excluded.
 
 ## References
 
