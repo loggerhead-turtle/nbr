@@ -5,16 +5,41 @@
  * actively searches). Nothing here is persisted server-side.
  */
 
-import { generatePools, buildSchedule as coreBuildSchedule, buildBracket as coreBuildBracket } from "@nbr/core";
+import {
+  generatePools,
+  buildTournamentSchedule,
+  buildBracket as coreBuildBracket,
+  type GradedField,
+  type ScheduleDivisionInput,
+  type BracketGameInput,
+  type BracketResult,
+} from "@nbr/core";
 import type {
   TdTournament,
   TdUmpire,
   TdDivision,
   TdInvite,
   TdField,
+  FieldGrade,
   PaymentStatus,
 } from "./types";
 import { DEFAULT_ADVANCEMENT, ADVANCEMENT_PRESETS } from "./advancement-presets";
+import { parseHM, enumerateDays } from "./util";
+
+function flattenBracketSeed(bracket: BracketResult): BracketGameInput[] {
+  const out: BracketGameInput[] = [];
+  bracket.rounds.forEach((round, ri) => {
+    round.matchups.forEach((m) => {
+      if (ri === 0) {
+        if (!m.home.team || !m.away.team) return;
+        out.push({ roundIndex: ri, roundName: round.name, homeName: m.home.team.name, awayName: m.away.team.name });
+      } else {
+        out.push({ roundIndex: ri, roundName: round.name, homeName: "TBD", awayName: "TBD" });
+      }
+    });
+  });
+  return out;
+}
 
 export interface DemoStore {
   tournaments: TdTournament[];
@@ -96,14 +121,24 @@ function division(ageGroup: string, nbrLevel: string, nbrMin: number, nbrMax: nu
 
 const ALL_PAY: PaymentStatus[] = ["PAID", "DEPOSIT_PAID", "PAID", "INVITED", "PENCILED"];
 
+const ALL_AGES = ["U8", "U9", "U10", "U11", "U12", "U13", "U14", "U15", "U16"];
+
+function field(name: string, grade: FieldGrade, hasLights: boolean, ages: string[], notes = ""): TdField {
+  return { id: sid("f"), name, hasLights, grade, allowedAgeGroups: ages, privateNotes: notes };
+}
+
 function buildFields(): TdField[] {
+  // Graded so the scheduler can steer top pools and bracket finals to the best fields.
   return [
-    { id: sid("f"), name: "Miller Park #1", hasLights: true, allowedAgeGroups: ["U8", "U9", "U10"], privateNotes: "Gate code 4417. Groundskeeper: Dave (call before 7am drags)." },
-    { id: sid("f"), name: "Miller Park #2", hasLights: true, allowedAgeGroups: ["U10", "U11", "U12"], privateNotes: "" },
-    { id: sid("f"), name: "Lions Field", hasLights: false, allowedAgeGroups: ["U11", "U12", "U13"], privateNotes: "No lights — last slot 6:30pm in October." },
-    { id: sid("f"), name: "Veterans Diamond", hasLights: true, allowedAgeGroups: ["U13", "U14"], privateNotes: "Concession key in the TD box." },
-    { id: sid("f"), name: "Canyon Complex A", hasLights: true, allowedAgeGroups: ["U14", "U15", "U16"], privateNotes: "" },
-    { id: sid("f"), name: "Canyon Complex B", hasLights: false, allowedAgeGroups: ["U15", "U16"], privateNotes: "Shared with high school team Sat AM — ours after noon." },
+    field("Championship Diamond", "Championship", true, ALL_AGES, "Stadium field — finals only. Gate code 4417; groundskeeper Dave drags before 7am."),
+    field("Miller Park #1", "A", true, ["U8", "U9", "U10", "U11", "U12"], "Press box key in the TD box."),
+    field("Miller Park #2", "A", true, ["U10", "U11", "U12", "U13", "U14"], ""),
+    field("Veterans Diamond", "B", true, ["U11", "U12", "U13", "U14", "U15", "U16"], "Concession key on the blue lanyard."),
+    field("Canyon Complex A", "B", true, ["U13", "U14", "U15", "U16"], ""),
+    field("Lions Field", "C", false, ["U8", "U9", "U10", "U11", "U12", "U13"], "No lights — schedule keeps games before sunset."),
+    field("Canyon Complex B", "C", false, ["U14", "U15", "U16"], "Shared with the HS team Sat AM — ours after noon."),
+    field("Eastside #3", "D", false, ["U8", "U9", "U10", "U11"], "Portable mound; bring extra bases."),
+    field("Eastside #4", "D", false, ["U12", "U13", "U14"], ""),
   ];
 }
 
@@ -126,9 +161,16 @@ function buildUmpires(): TdUmpire[] {
     mk("Wes Carter", ["U14", "U15", "U16"], false),
     mk("Gloria Mendez", ["U11", "U12", "U13"], true),
     mk("Sam Whitfield", ["U15", "U16"], true, false),
+    mk("Andre Brooks", ["U8", "U9", "U10", "U11", "U12"], true),
+    mk("Lena Park", ["U11", "U12", "U13", "U14"], true),
+    mk("Hector Ramos", ["U13", "U14", "U15", "U16"], false),
+    mk("Janet Cole", ["U9", "U10", "U11"], true),
+    mk("Rashad Powell", ["U12", "U13", "U14", "U15"], true),
+    mk("Olivia Tran", ["U8", "U9", "U10"], true, false),
   ];
-  list[1]!.notes.unshift({ id: sid("note"), body: "Excellent with coaches; great strike zone consistency. Request him for championship games.", createdAt: new Date().toISOString() });
+  list[1]!.notes.unshift({ id: sid("note"), body: "Excellent demeanor; consistent zone. Request for championship games.", createdAt: new Date().toISOString() });
   list[3]!.notes.unshift({ id: sid("note"), body: "Strong umpire but ran 15 min late Saturday — confirm arrival time next event.", createdAt: new Date().toISOString() });
+  list[8]!.notes.unshift({ id: sid("note"), body: "Great with the younger divisions and parents. Reliable.", createdAt: new Date().toISOString() });
   return list;
 }
 
@@ -138,11 +180,18 @@ function emptyTournament(over: Partial<TdTournament>): TdTournament {
     name: "Demo Tournament",
     status: "DRAFT",
     startDate: null,
+    endDate: null,
     location: null,
     entryFee: null,
     depositAmount: null,
     poolPlayGames: 3,
+    poolPlayGamesPerDay: 2,
     allowCrossover: false,
+    dayStartTime: "08:00",
+    gamesEndBy: "21:00",
+    sunsetTime: "20:15",
+    gameDurationMinutes: 105,
+    bracketDayIndex: 1,
     divisions: [],
     invites: [],
     fields: [],
@@ -164,11 +213,18 @@ export function buildDemoStore(): DemoStore {
     name: "Wasatch Fall Classic",
     status: "FINALIZED",
     startDate: new Date(Date.now() + 9 * 864e5).toISOString(),
+    endDate: new Date(Date.now() + 10 * 864e5).toISOString(),
     location: "Miller Park, Salt Lake City",
     entryFee: 595,
     depositAmount: 150,
     poolPlayGames: 3,
+    poolPlayGamesPerDay: 2,
     allowCrossover: false,
+    dayStartTime: "08:00",
+    gamesEndBy: "21:00",
+    sunsetTime: "20:15",
+    gameDurationMinutes: 105,
+    bracketDayIndex: 1, // pool play day 1, brackets day 2
     fields: buildFields(),
   });
   // Eight age groups; 10U and 12U each split into two NBR levels (two events in one).
@@ -213,33 +269,56 @@ export function buildDemoStore(): DemoStore {
       d.bracket = coreBuildBracket(standings, DEFAULT_ADVANCEMENT);
     }
   }
-  // Schedule across all divisions.
-  const fieldsForSchedule = t1.fields.map((f) => ({
+  // Schedule the whole tournament at once: pool play day 1, brackets day 2,
+  // onto graded fields with real clock times (lights/sunset aware).
+  const fieldsForSchedule: GradedField[] = t1.fields.map((f) => ({
     id: f.id,
     name: f.name,
     hasLights: f.hasLights,
     allowedAgeGroups: f.allowedAgeGroups,
+    grade: f.grade,
   }));
-  for (const d of t1.divisions) {
-    if (!d.pools) continue;
-    const pools = d.pools.pools.map((p) => ({ label: p.label, teams: p.teams.map((tm) => ({ id: tm.id, name: tm.name })) }));
-    const res = coreBuildSchedule(pools, fieldsForSchedule, { ageGroup: d.ageGroup, poolPlayGames: 3, allowCrossover: false });
-    for (const g of res.games) {
-      t1.schedule.push({
-        id: sid("game"),
-        divisionId: d.id,
-        poolLabel: g.poolLabel,
-        fieldId: g.fieldId,
-        fieldName: g.fieldName,
-        slotLabel: g.slotLabel,
-        homeTeamId: g.homeTeamId,
-        homeTeamName: g.homeTeamName,
-        awayTeamId: g.awayTeamId,
-        awayTeamName: g.awayTeamName,
-        isCrossover: g.isCrossover,
-        umpireId: null,
-      });
-    }
+  const scheduleDivisions: ScheduleDivisionInput[] = t1.divisions
+    .filter((d) => d.pools)
+    .map((d) => ({
+      id: d.id,
+      ageGroup: d.ageGroup,
+      pools: d.pools!.pools.map((p) => ({ label: p.label, teams: p.teams.map((tm) => ({ id: tm.id, name: tm.name })) })),
+      bracketGames: d.bracket ? flattenBracketSeed(d.bracket) : undefined,
+    }));
+  const days = enumerateDays(t1.startDate, t1.endDate);
+  const sched = buildTournamentSchedule(scheduleDivisions, fieldsForSchedule, {
+    days,
+    dayStartMinutes: parseHM(t1.dayStartTime),
+    endByMinutes: parseHM(t1.gamesEndBy),
+    sunsetMinutes: parseHM(t1.sunsetTime),
+    gameDurationMinutes: t1.gameDurationMinutes,
+    poolPlayGamesPerDay: t1.poolPlayGamesPerDay,
+    poolPlayGamesTotal: t1.poolPlayGames,
+    allowCrossover: t1.allowCrossover,
+    bracketDayIndex: Math.min(t1.bracketDayIndex, days.length - 1),
+  });
+  for (const g of sched.games) {
+    t1.schedule.push({
+      id: sid("game"),
+      divisionId: g.divisionId,
+      kind: g.kind,
+      poolLabel: g.poolLabel,
+      roundName: g.roundName,
+      fieldId: g.fieldId,
+      fieldName: g.fieldName,
+      fieldGrade: g.fieldGrade,
+      dayIndex: g.dayIndex,
+      date: g.date,
+      startMinutes: g.startMinutes,
+      slotLabel: g.slotLabel,
+      homeTeamId: g.homeTeamId,
+      homeTeamName: g.homeTeamName,
+      awayTeamId: g.awayTeamId,
+      awayTeamName: g.awayTeamName,
+      isCrossover: g.isCrossover,
+      umpireId: null,
+    });
   }
   // Assign a couple of umpires to opening games.
   const firstGames = t1.schedule.slice(0, 2);
@@ -253,9 +332,11 @@ export function buildDemoStore(): DemoStore {
     name: "Canyon Country Shootout",
     status: "OPEN",
     startDate: new Date(Date.now() + 23 * 864e5).toISOString(),
+    endDate: new Date(Date.now() + 24 * 864e5).toISOString(),
     location: "Canyon Complex, Provo",
     entryFee: 650,
     depositAmount: 200,
+    fields: buildFields(),
   });
   const t2Divs = [
     division("U11", "NBR I", 155, 182),
@@ -290,9 +371,11 @@ export function buildDemoStore(): DemoStore {
     name: "Spring Kickoff Invitational",
     status: "DRAFT",
     startDate: new Date(Date.now() + 60 * 864e5).toISOString(),
+    endDate: new Date(Date.now() + 61 * 864e5).toISOString(),
     location: "TBD",
     entryFee: 525,
     depositAmount: 125,
+    fields: buildFields(),
   });
 
   return { tournaments: [t1, t2, t3], umpires };

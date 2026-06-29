@@ -15,7 +15,29 @@ import type {
   TdAdvancementRule,
   PaymentStatus,
   TeamSearchParams,
+  FieldGrade,
 } from "./types";
+
+export type TournamentPatch = Partial<
+  Pick<
+    TdTournament,
+    | "name"
+    | "status"
+    | "startDate"
+    | "endDate"
+    | "location"
+    | "entryFee"
+    | "depositAmount"
+    | "poolPlayGames"
+    | "poolPlayGamesPerDay"
+    | "allowCrossover"
+    | "dayStartTime"
+    | "gamesEndBy"
+    | "sunsetTime"
+    | "gameDurationMinutes"
+    | "bracketDayIndex"
+  >
+>;
 
 export interface CreateTournamentInput {
   name: string;
@@ -35,13 +57,22 @@ export interface AddDivisionInput {
 export interface AddFieldInput {
   name: string;
   hasLights: boolean;
+  grade: FieldGrade;
   allowedAgeGroups: string[];
   privateNotes?: string;
 }
 
 export interface ScheduleOptionsInput {
-  poolPlayGames: number;
+  poolPlayGames: number; // total per team
+  poolPlayGamesPerDay: number;
   allowCrossover: boolean;
+  startDate: string; // ISO date
+  endDate: string; // ISO date
+  dayStartTime: string; // "HH:MM"
+  gamesEndBy: string; // "HH:MM"
+  sunsetTime: string; // "HH:MM"
+  gameDurationMinutes: number;
+  bracketDayIndex: number;
 }
 
 export interface RegisterUmpireInput {
@@ -58,7 +89,7 @@ export interface TdDataPort {
   listTournaments(): Promise<TdTournament[]>;
   getTournament(id: string): Promise<TdTournament | null>;
   createTournament(input: CreateTournamentInput): Promise<TdTournament>;
-  updateTournament(id: string, patch: Partial<CreateTournamentInput & { status: string; poolPlayGames: number; allowCrossover: boolean }>): Promise<void>;
+  updateTournament(id: string, patch: TournamentPatch): Promise<void>;
   deleteTournament(id: string): Promise<void>;
 
   // Divisions

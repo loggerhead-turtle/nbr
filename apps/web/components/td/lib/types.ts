@@ -5,9 +5,18 @@
  * components render in both modes.
  */
 
-import type { PoolResult, BracketResult } from "@nbr/core";
+import type { PoolResult, BracketResult, FieldGrade } from "@nbr/core";
+
+export type { FieldGrade };
 
 export type TournamentStatus = "DRAFT" | "OPEN" | "FINALIZED";
+
+/** Game time-limit options. 1h45 lets games run every 2h; longer limits widen the slot. */
+export const GAME_DURATIONS: { minutes: number; label: string }[] = [
+  { minutes: 105, label: "1h 45m (games every 2h)" },
+  { minutes: 120, label: "2h (games every 2h 15m)" },
+  { minutes: 135, label: "2h 15m (games every 2h 30m)" },
+];
 
 /** Combined invite + payment standing the director tracks per team. */
 export type PaymentStatus = "PENCILED" | "INVITED" | "DEPOSIT_PAID" | "PAID";
@@ -55,6 +64,8 @@ export interface TdField {
   id: string;
   name: string;
   hasLights: boolean;
+  /** Field grade — Championship is best; top pools and bracket finals land here. */
+  grade: FieldGrade;
   allowedAgeGroups: string[]; // ["U10","U12"]
   privateNotes: string; // TD-only
 }
@@ -62,9 +73,15 @@ export interface TdField {
 export interface TdScheduleGame {
   id: string;
   divisionId: string;
+  kind: "pool" | "bracket";
   poolLabel: string | null;
+  roundName: string | null; // bracket round, e.g. "Final"
   fieldId: string | null;
   fieldName: string | null;
+  fieldGrade: FieldGrade | null;
+  dayIndex: number | null;
+  date: string | null;
+  startMinutes: number | null;
   slotLabel: string;
   homeTeamId: string;
   homeTeamName: string;
@@ -114,12 +131,20 @@ export interface TdTournament {
   id: string;
   name: string;
   status: TournamentStatus;
-  startDate: string | null;
+  startDate: string | null; // ISO date (day 1)
+  endDate: string | null; // ISO date (last day)
   location: string | null;
   entryFee: number | null;
   depositAmount: number | null;
-  poolPlayGames: number;
+  // Scheduling config.
+  poolPlayGames: number; // total pool games per team
+  poolPlayGamesPerDay: number; // per team per day (default 2)
   allowCrossover: boolean;
+  dayStartTime: string; // "HH:MM"
+  gamesEndBy: string; // "HH:MM" hard cutoff
+  sunsetTime: string; // "HH:MM" — no-light fields must finish by this
+  gameDurationMinutes: number; // time limit (105 | 120 | 135)
+  bracketDayIndex: number; // which day hosts bracket games (0-based)
   divisions: TdDivision[];
   invites: TdInvite[];
   fields: TdField[];
