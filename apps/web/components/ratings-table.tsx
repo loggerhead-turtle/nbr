@@ -9,17 +9,23 @@ import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
 import type { RatingRow } from "@/lib/queries";
 
 type Metric = "rating" | "games" | "record";
-const METRIC_LABEL: Record<Metric, string> = { rating: "NBR", games: "GP", record: "Record" };
+type SortCol = "name" | "games" | "rating";
 
-/** Build a homepage URL with one query param changed, resetting pagination. */
-function withParam(sp: Record<string, string | undefined>, key: string, value: string): string {
+/** Build a homepage URL with several query params changed, resetting pagination. */
+function withParams(
+  sp: Record<string, string | undefined>,
+  overrides: Record<string, string>,
+): string {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) {
-    if (v && k !== "page" && k !== key) params.set(k, v);
+    if (v && k !== "page" && !(k in overrides)) params.set(k, String(v));
   }
-  params.set(key, value);
+  for (const [k, v] of Object.entries(overrides)) params.set(k, v);
   return `/?${params.toString()}`;
 }
+
+/** Default direction for a column: names A→Z, numbers high→low. */
+const defaultDir = (col: SortCol): "asc" | "desc" => (col === "name" ? "asc" : "desc");
 
 const PAD = "px-3 py-3 sm:px-4";
 
@@ -32,23 +38,28 @@ const PAD = "px-3 py-3 sm:px-4";
 export function RatingsTable({
   rows,
   sort,
+  dir,
   sp,
 }: {
   rows: RatingRow[];
   sort: string;
+  dir: "asc" | "desc";
   sp: Record<string, string | undefined>;
 }) {
-  const [metric, setMetric] = useState<Metric>("rating");
+  // Which metric column shows on mobile. Follows the active sort, but Record
+  // (not sortable) can be viewed via its button without changing the sort.
+  const [metric, setMetric] = useState<Metric>(sort === "games" ? "games" : "rating");
 
-  // A togglable metric column: visible on mobile only when it's the active one;
-  // always visible from sm up.
   const vis = (m: Metric) => (metric === m ? "" : "hidden sm:table-cell");
-  const caret = (col: string) =>
-    sort === col ? (col === "name" ? "▲" : "▼") : "↕";
+  // Clicking the active column flips direction; a new column starts at its default.
+  const nextDir = (col: SortCol) =>
+    sort === col ? (dir === "desc" ? "asc" : "desc") : defaultDir(col);
+  const sortHref = (col: SortCol) => withParams(sp, { sort: col, dir: nextDir(col) });
+  const caret = (col: SortCol) => (sort === col ? (dir === "asc" ? "▲" : "▼") : "↕");
 
-  const SortLink = ({ label, col }: { label: string; col: "name" | "games" | "rating" }) => (
+  const SortLink = ({ label, col }: { label: string; col: SortCol }) => (
     <Link
-      href={withParam(sp, "sort", col)}
+      href={sortHref(col)}
       className={`inline-flex items-center gap-1 hover:text-white ${sort === col ? "text-white" : ""}`}
     >
       {label}
@@ -60,21 +71,33 @@ export function RatingsTable({
 
   return (
     <>
-      {/* Mobile-only: prominent accent buttons (like the Generate Pools / Find a
-          Scrimmage buttons) to swap which metric column is shown. */}
+      {/* Mobile-only: prominent buttons that SORT by a metric (and show that
+          column). NBR/GP are sort links (tap again to flip direction); Record is
+          not sortable, so it only toggles which column is shown. */}
       <div className="mb-3 flex items-center gap-2 sm:hidden">
-        <span className="shrink-0 text-xs font-medium text-slate-500">Show:</span>
-        {(Object.keys(METRIC_LABEL) as Metric[]).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setMetric(m)}
-            aria-pressed={metric === m}
-            className={`flex-1 ${metric === m ? "btn-accent" : "btn-ghost"}`}
-          >
-            {METRIC_LABEL[m]}
-          </button>
-        ))}
+        <span className="shrink-0 text-xs font-medium text-slate-500">Sort:</span>
+        <Link
+          href={sortHref("rating")}
+          onClick={() => setMetric("rating")}
+          className={`flex-1 text-center ${sort === "rating" ? "btn-accent" : "btn-ghost"}`}
+        >
+          NBR {caret("rating")}
+        </Link>
+        <Link
+          href={sortHref("games")}
+          onClick={() => setMetric("games")}
+          className={`flex-1 text-center ${sort === "games" ? "btn-accent" : "btn-ghost"}`}
+        >
+          GP {caret("games")}
+        </Link>
+        <button
+          type="button"
+          onClick={() => setMetric("record")}
+          aria-pressed={metric === "record"}
+          className={`flex-1 ${metric === "record" ? "btn-accent" : "btn-ghost"}`}
+        >
+          Record
+        </button>
       </div>
 
       <div className="card overflow-x-auto">

@@ -62,6 +62,29 @@ export function isRatingAlgorithm(value: string): value is RatingAlgorithmId {
 export const AGE_OFFSET_KEY = "ageOffsetStep";
 export const DEFAULT_AGE_STEP = 200;
 export const AGE_ANCHOR_YEAR = 14;
+/** Reduced per-year step for older ages (the gap shrinks as kids grow). */
+export const AGE_OFFSET_STEP_OLDER_KEY = "ageOffsetStepOlder";
+export const DEFAULT_AGE_STEP_OLDER = 75;
+/** Ages at/above this year use the reduced (older) step. */
+export const AGE_OLDER_THRESHOLD = 16;
+
+/** Cumulative cross-age offset (display points) for an age, 14U = 0, with the
+ *  reduced step applied at/above AGE_OLDER_THRESHOLD. */
+export function ageBaselinePoints(
+  ageYearNum: number,
+  step: number = DEFAULT_AGE_STEP,
+  olderStep: number = DEFAULT_AGE_STEP_OLDER,
+  anchor: number = AGE_ANCHOR_YEAR,
+  threshold: number = AGE_OLDER_THRESHOLD,
+): number {
+  let v = 0;
+  if (ageYearNum > anchor) {
+    for (let y = anchor + 1; y <= ageYearNum; y++) v += y >= threshold ? olderStep : step;
+  } else {
+    for (let y = ageYearNum + 1; y <= anchor; y++) v -= y >= threshold ? olderStep : step;
+  }
+  return v;
+}
 
 /** Clamp a raw points-per-age-year value to a sane range. */
 export function clampAgeStep(raw: unknown): number {

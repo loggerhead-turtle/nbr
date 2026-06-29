@@ -167,6 +167,23 @@ describe("computeRatingsBT — age-baseline curve (bt-age-v1)", () => {
     expect(c.get("U14")! - c.get("U13")!).toBeGreaterThan(150);
   });
 
+  it("tapers the per-year step for older ages (16U+)", () => {
+    const agesT = new Map<string, string>([
+      ["a", "U14"], ["b", "U15"], ["c", "U16"], ["d", "U17"],
+    ]);
+    const games: EngineGame[] = [game("a", "b", 5, 4, 0), game("b", "c", 5, 4, 1), game("c", "d", 5, 4, 2)];
+    const out = computeRatingsBT(games, {
+      ageGroup: agesT,
+      ageStepPrior: 200 / BT_SCALE,
+      ageStepOlder: 75 / BT_SCALE,
+      ageOlderThreshold: 16,
+    });
+    const c = new Map(out.ageCurve!.map((x) => [x.ageGroup, x.baseline]));
+    expect(Math.round(c.get("U15")! - c.get("U14")!)).toBe(200); // below threshold
+    expect(Math.round(c.get("U16")! - c.get("U15")!)).toBe(75); // 16U+ reduced
+    expect(Math.round(c.get("U17")! - c.get("U16")!)).toBe(75);
+  });
+
   it("can still learn the curve when fitAgeCurve is enabled", () => {
     const ages4 = new Map<string, string>([["p", "U10"], ["q", "U10"], ["r", "U16"], ["s", "U16"]]);
     const games: EngineGame[] = [

@@ -51,8 +51,16 @@ export interface BradleyTerryOptions {
    * Teams with an unrecognised/absent key behave like the plain model (β = 0).
    */
   ageGroup?: Map<string, string>;
-  /** Expected per-year developmental step of the age curve, in θ units (prior). */
+  /** Per-age-year developmental step (θ units) below `ageOlderThreshold`. */
   ageStepPrior?: number;
+  /**
+   * Reduced per-year step (θ units) for ages at/above `ageOlderThreshold`. The
+   * gap between brackets shrinks with age (an 8U→9U jump dwarfs a 16U→17U one),
+   * so older years add less. Defaults below ≈ 75 display pts vs 200 for younger.
+   */
+  ageStepOlder?: number;
+  /** Age (years) at/above which `ageStepOlder` replaces `ageStepPrior`. */
+  ageOlderThreshold?: number;
   /** Strength of the age-curve step prior (smoothness + the expected step). */
   ageCurveLambda?: number;
   /** Strength of the absolute anchor pinning the youngest present age. */
@@ -82,6 +90,10 @@ const DEFAULTS = {
   // large (a 9U almost never beats a 16U), so the prior must dominate the within-
   // age spread. runRecompute overrides this from the admin "points/year" setting.
   ageStepPrior: 1.0,
+  // ~75 display pts/year for older ages (≈ 0.43 θ); runRecompute overrides from
+  // the admin "older points/year" setting. Threshold 16 ⇒ 16U+ uses this.
+  ageStepOlder: 75 / 173.7178,
+  ageOlderThreshold: 16,
   // Hold the curve firmly on the developmental prior; cross-age "bridge" games are
   // sparse and positively selected (only strong young teams play up), so a weak
   // prior gets compressed. High λ keeps the steps near the prior unless there's
@@ -99,6 +111,27 @@ const DEFAULTS = {
 
 /** Age the unified scale is centered on for display (14U ≈ BASE/1500). */
 const AGE_ANCHOR_YEAR = 14;
+
+/**
+ * Cumulative developmental offset (θ) for an age, centered at 14U = 0. Each
+ * year adds `step`, except years at/above `threshold` add the reduced
+ * `olderStep` (the gap shrinks as kids get older). Monotonically increasing.
+ */
+function ageBaseline(
+  yearNum: number,
+  step: number,
+  olderStep: number,
+  threshold: number,
+  anchor: number,
+): number {
+  let v = 0;
+  if (yearNum > anchor) {
+    for (let y = anchor + 1; y <= yearNum; y++) v += y >= threshold ? olderStep : step;
+  } else {
+    for (let y = yearNum + 1; y <= anchor; y++) v -= y >= threshold ? olderStep : step;
+  }
+  return v;
+}
 
 const SCALE = 173.7178; // display points per θ unit (matches the Glicko scale)
 const BASE = 1500;
@@ -163,6 +196,8 @@ export function computeRatingsBT(
     movCap: options.movCap ?? DEFAULTS.movCap,
     lambda: options.lambda ?? DEFAULTS.lambda,
     ageStepPrior: options.ageStepPrior ?? DEFAULTS.ageStepPrior,
+    ageStepOlder: options.ageStepOlder ?? DEFAULTS.ageStepOlder,
+    ageOlderThreshold: options.ageOlderThreshold ?? DEFAULTS.ageOlderThreshold,
     ageCurveLambda: options.ageCurveLambda ?? DEFAULTS.ageCurveLambda,
     ageAnchorLambda: options.ageAnchorLambda ?? DEFAULTS.ageAnchorLambda,
     enforceMonotone: options.enforceMonotone ?? DEFAULTS.enforceMonotone,
@@ -234,7 +269,10 @@ export function computeRatingsBT(
     // The developmental curve, centered at 14U (= BASE). When fitting it is a
     // warm-start; when fixed (the default) it stays exactly this — `step` points
     // per age-year, robust to selection-biased bridge games.
-    beta.set(a, opt.ageStepPrior * (ageYear(a)! - AGE_ANCHOR_YEAR));
+    beta.set(
+      a,
+      ageBaseline(ageYear(a)!, opt.ageStepPrior, opt.ageStepOlder, opt.ageOlderThreshold, AGE_ANCHOR_YEAR),
+    );
     bridgeCount.set(a, 0);
   }
   if (ageMode) {

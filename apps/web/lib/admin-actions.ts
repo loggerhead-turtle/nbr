@@ -22,7 +22,7 @@ import {
   normalizeWebsiteUrl,
   isRatingAlgorithm,
 } from "@nbr/core";
-import { AGE_OFFSET_KEY, clampAgeStep } from "./age-offset";
+import { AGE_OFFSET_KEY, AGE_OFFSET_STEP_OLDER_KEY, clampAgeStep } from "./age-offset";
 import { LIVE_SEARCH_KEY } from "./site-settings";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew, triggerRecompute } from "./render-jobs";
@@ -436,11 +436,19 @@ export async function setLiveSearchAction(formData: FormData): Promise<void> {
 export async function setAgeOffsetStepAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const step = clampAgeStep(formData.get("step"));
-  await prisma.appSetting.upsert({
-    where: { key: AGE_OFFSET_KEY },
-    create: { key: AGE_OFFSET_KEY, value: String(step) },
-    update: { value: String(step) },
-  });
+  const stepOlder = clampAgeStep(formData.get("stepOlder") ?? 75);
+  await Promise.all([
+    prisma.appSetting.upsert({
+      where: { key: AGE_OFFSET_KEY },
+      create: { key: AGE_OFFSET_KEY, value: String(step) },
+      update: { value: String(step) },
+    }),
+    prisma.appSetting.upsert({
+      where: { key: AGE_OFFSET_STEP_OLDER_KEY },
+      create: { key: AGE_OFFSET_STEP_OLDER_KEY, value: String(stepOlder) },
+      update: { value: String(stepOlder) },
+    }),
+  ]);
   revalidatePath("/admin/age-offset");
 }
 
