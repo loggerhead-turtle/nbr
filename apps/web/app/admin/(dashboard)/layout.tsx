@@ -3,14 +3,18 @@ import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth";
 import { logoutAction } from "@/lib/admin-actions";
 import { countDuplicateCandidates } from "@/lib/duplicates";
+import { countNewActivity, getActivitySeenAt } from "@/lib/activity";
 import { countGhostTeams } from "@nbr/db";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   if (!(await isAdmin())) redirect("/admin/login");
 
-  const [dupCount, ghostCount] = await Promise.all([
+  const [dupCount, ghostCount, activityCount] = await Promise.all([
     countDuplicateCandidates(),
     countGhostTeams().catch(() => 0),
+    getActivitySeenAt()
+      .then((since) => countNewActivity(since))
+      .catch(() => 0),
   ]);
 
   return (
@@ -19,6 +23,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <nav className="flex flex-wrap gap-2 text-sm font-medium">
           <Link href="/admin" className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100">
             Dashboard
+          </Link>
+          <Link
+            href="/admin/activity"
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Activity
+            {activityCount > 0 && (
+              <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-600 px-1.5 py-0.5 text-xs font-bold text-white">
+                {activityCount > 99 ? "99+" : activityCount}
+              </span>
+            )}
           </Link>
           <Link
             href="/admin/teams"

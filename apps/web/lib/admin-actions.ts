@@ -27,6 +27,7 @@ import { LIVE_SEARCH_KEY } from "./site-settings";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew, triggerRecompute } from "./render-jobs";
 import type { MergeTargetOption } from "./merge-types";
+import { markActivitySeen } from "./activity";
 import { sendEmail, emailLayout, siteUrl } from "./email";
 import { getCurrentSeasonYear } from "./season";
 import { setRatingAlgorithm } from "./settings";
@@ -525,6 +526,13 @@ export async function repairBadMergesAction(formData: FormData): Promise<void> {
   revalidatePath("/admin/bad-merges");
   revalidatePath("/admin/ghosts");
   revalidatePath("/");
+}
+
+/** Mark the admin activity feed as seen (clears the nav "new" badge). */
+export async function markActivitySeenAction(): Promise<void> {
+  await requireAdmin();
+  await markActivitySeen();
+  revalidatePath("/admin", "layout");
 }
 
 export async function setUserRoleAction(formData: FormData): Promise<void> {
