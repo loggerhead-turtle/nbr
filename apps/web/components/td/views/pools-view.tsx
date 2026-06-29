@@ -53,14 +53,15 @@ function DivisionPools({ divisionId }: { divisionId: string }) {
             <div className="flex items-end gap-2">
               <div>
                 <label className="label text-[11px]">Pools</label>
-                <input
-                  type="number"
-                  min={2}
-                  max={Math.max(2, teamCount)}
+                <select
                   value={numPools}
-                  onChange={(e) => setNumPools(Math.max(2, Math.min(teamCount, Number(e.target.value) || 2)))}
+                  onChange={(e) => setNumPools(Number(e.target.value))}
                   className="input w-20"
-                />
+                >
+                  {Array.from({ length: Math.max(1, teamCount - 1) }, (_, i) => i + 2).map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
               </div>
               <button onClick={generate} disabled={busy} className="btn-accent disabled:opacity-50">
                 {busy ? "Generating…" : div.pools ? "Regenerate" : "Generate pools"}
