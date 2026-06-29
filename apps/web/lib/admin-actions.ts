@@ -3,7 +3,13 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { prisma, GameSource, GameStatus } from "@nbr/db";
+import {
+  prisma,
+  GameSource,
+  GameStatus,
+  findCrossAgeMergeArtifacts,
+  repairCrossAgeMerge,
+} from "@nbr/db";
 import {
   createTeamSchema,
   createGameSchema,
@@ -18,7 +24,7 @@ import {
 import { AGE_OFFSET_KEY, clampAgeStep } from "./age-offset";
 import { LIVE_SEARCH_KEY } from "./site-settings";
 import { findPromotableTeam, mergeTeams } from "./teams";
-import { triggerScrapeTeam, triggerScrapeNew } from "./render-jobs";
+import { triggerScrapeTeam, triggerScrapeNew, triggerRecompute } from "./render-jobs";
 import type { MergeTargetOption } from "./merge-types";
 import { sendEmail, emailLayout, siteUrl } from "./email";
 import { getCurrentSeasonYear } from "./season";
@@ -477,6 +483,32 @@ export async function searchMergeTargets(query: string): Promise<MergeTargetOpti
     take: 15,
   });
   return teams;
+}
+
+/**
+ * Repair cross-age-group merge artifacts: split off-age games back onto
+ * regenerated ghosts at the opponent's age, then trigger a recompute. An empty
+ * `teamId` repairs every flagged team; otherwise just the one. `gap` is the
+ * minimum age-year distance that counts as suspect (default 3).
+ */
+export async function repairBadMergesAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const teamId = String(formData.get("teamId") ?? "");
+  const gap = Math.max(2, Number(formData.get("gap") ?? "3") || 3);
+
+  const findings = await findCrossAgeMergeArtifacts(gap);
+  const targets = teamId ? findings.filter((f) => f.teamId === teamId) : findings;
+
+  let moved = 0;
+  for (const f of targets) moved += await repairCrossAgeMerge(f);
+
+  // Reassigned games change ratings — kick a recompute (no-op if Render isn't
+  // configured; the scheduled recompute will catch it either way).
+  if (moved > 0) await triggerRecompute();
+
+  revalidatePath("/admin/bad-merges");
+  revalidatePath("/admin/ghosts");
+  revalidatePath("/");
 }
 
 export async function setUserRoleAction(formData: FormData): Promise<void> {
