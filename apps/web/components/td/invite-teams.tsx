@@ -82,7 +82,7 @@ export function InviteTeams({
       />
       <div className="mt-2 flex flex-wrap gap-2">
         <div className="w-24">
-          <label className="label text-[11px]">Min rating</label>
+          <label className="label text-[11px]">Min NBR</label>
           <input
             className="input"
             value={ratingMin}
@@ -92,7 +92,7 @@ export function InviteTeams({
           />
         </div>
         <div className="w-24">
-          <label className="label text-[11px]">Max rating</label>
+          <label className="label text-[11px]">Max NBR</label>
           <input
             className="input"
             value={ratingMax}

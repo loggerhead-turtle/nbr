@@ -235,10 +235,18 @@ function SchedulePanel() {
             </select>
           </Field>
           <Field label="Pool games / team / day">
-            <input type="number" min={1} max={6} className="input" value={form.poolPlayGamesPerDay} onChange={(e) => set("poolPlayGamesPerDay", Math.max(1, Number(e.target.value) || 1))} />
+            <select className="input" value={form.poolPlayGamesPerDay} onChange={(e) => set("poolPlayGamesPerDay", Number(e.target.value))}>
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
           </Field>
           <Field label="Pool games / team (total)">
-            <input type="number" min={1} max={12} className="input" value={form.poolPlayGames} onChange={(e) => set("poolPlayGames", Math.max(1, Number(e.target.value) || 1))} />
+            <select className="input" value={form.poolPlayGames} onChange={(e) => set("poolPlayGames", Number(e.target.value))}>
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
           </Field>
           <Field label="Bracket day">
             <select className="input" value={Math.min(form.bracketDayIndex, days.length - 1)} onChange={(e) => set("bracketDayIndex", Number(e.target.value))}>

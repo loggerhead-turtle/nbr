@@ -7,6 +7,12 @@ import { divisionLabel, SectionTitle, EmptyCard } from "../lib/ui";
 import { ADVANCEMENT_PRESETS } from "../lib/advancement-presets";
 import type { TdAdvancementRule } from "../lib/types";
 
+const SEED_BY_LABEL: Record<TdAdvancementRule["seedBy"], string> = {
+  POOL_RECORD: "pool record",
+  RATING: "NBR",
+  RUN_DIFF: "run differential",
+};
+
 export function BracketsView() {
   const { selected } = useTd();
   if (!selected) return null;
@@ -49,7 +55,7 @@ function DivisionBracket({ divisionId }: { divisionId: string }) {
     <div className="card p-4">
       <SectionTitle
         title={divisionLabel(div)}
-        sub={rule ? `Rule: ${rule.name}` : "No advancement rule chosen yet."}
+        sub={rule ? `${rule.name} — ${rule.synopsis}` : "No advancement rule chosen yet."}
         action={
           <div className="flex gap-2">
             <button onClick={() => setShowRules((v) => !v)} className="btn-ghost">{showRules ? "Close rules" : "Advancement rules"}</button>
@@ -112,18 +118,26 @@ function CustomRuleForm({ onSave, current }: { onSave: (r: TdAdvancementRule) =>
       <p className="mb-2 text-sm font-semibold text-navy-900">Custom advancement rule</p>
       <div className="flex flex-wrap gap-3">
         <div>
-          <label className="label text-[11px]">Top-N per pool</label>
-          <input type="number" min={1} max={99} value={winners} onChange={(e) => setWinners(Math.max(1, Number(e.target.value) || 1))} className="input w-24" />
+          <label className="label text-[11px]">Teams advancing per pool</label>
+          <select className="input w-28" value={winners} onChange={(e) => setWinners(Number(e.target.value))}>
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="label text-[11px]">Wildcards</label>
-          <input type="number" min={0} max={16} value={wildcards} onChange={(e) => setWildcards(Math.max(0, Number(e.target.value) || 0))} className="input w-24" />
+          <select className="input w-28" value={wildcards} onChange={(e) => setWildcards(Number(e.target.value))}>
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="label text-[11px]">Seed by</label>
           <select className="input" value={seedBy} onChange={(e) => setSeedBy(e.target.value as TdAdvancementRule["seedBy"])}>
             <option value="POOL_RECORD">Pool record</option>
-            <option value="RATING">NBR rating</option>
+            <option value="RATING">NBR</option>
             <option value="RUN_DIFF">Run differential</option>
           </select>
         </div>
@@ -137,7 +151,7 @@ function CustomRuleForm({ onSave, current }: { onSave: (r: TdAdvancementRule) =>
           onSave({
             presetKey: null,
             name: "Custom rule",
-            synopsis: `Top ${winners} per pool${wildcards ? ` + ${wildcards} wildcard${wildcards === 1 ? "" : "s"}` : ""}, seeded by ${seedBy.toLowerCase().replace("_", " ")}${reseed ? ", reseeded" : ""}.`,
+            synopsis: `Top ${winners} per pool${wildcards ? ` + ${wildcards} wildcard${wildcards === 1 ? "" : "s"}` : ""}, seeded by ${SEED_BY_LABEL[seedBy]}${reseed ? ", reseeded" : ""}.`,
             poolWinnersAdvance: winners,
             wildcards,
             seedBy,
