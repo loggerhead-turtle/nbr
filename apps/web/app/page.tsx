@@ -119,6 +119,9 @@ function Hero() {
           <Link href="/pools" className="btn-accent">
             Generate Tournament Pools
           </Link>
+          <Link href="/demo/td" className="btn-accent">
+            Tournament Director Demo
+          </Link>
           <Link href="/scrimmages" className="btn-accent">
             Find a Scrimmage
           </Link>

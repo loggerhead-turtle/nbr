@@ -9,7 +9,7 @@ import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
 import type { RatingRow } from "@/lib/queries";
 
 type Metric = "rating" | "games" | "record";
-const METRIC_LABEL: Record<Metric, string> = { rating: "Rating", games: "GP", record: "Record" };
+const METRIC_LABEL: Record<Metric, string> = { rating: "NBR", games: "GP", record: "Record" };
 
 /** Build a homepage URL with one query param changed, resetting pagination. */
 function withParam(sp: Record<string, string | undefined>, key: string, value: string): string {
@@ -90,7 +90,7 @@ export function RatingsTable({
               </th>
               <th className={`text-right ${PAD} ${vis("record")}`}>Record</th>
               <th className={`text-right ${PAD} ${vis("rating")}`}>
-                <SortLink label="Rating" col="rating" />
+                <SortLink label="NBR" col="rating" />
               </th>
             </tr>
           </thead>

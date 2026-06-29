@@ -119,7 +119,7 @@ export default async function TeamPage({ params }: Params) {
           </div>
           <div className="text-right">
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-              NBR Rating
+              NBR
             </p>
             <p className="text-4xl font-black tabular-nums text-navy-900">
               {team.rating ? formatRating(team.rating.rating) : "—"}

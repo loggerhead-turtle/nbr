@@ -337,6 +337,7 @@ model User {
   reports       Report[]
   scrimmagePref ScrimmagePref[]
   tournaments   Tournament[]
+  umpire        Umpire?
 }
 
 model Tournament {
@@ -346,9 +347,154 @@ model Tournament {
   name           String
   createdAt      DateTime @default(now())
 
-  invites TournamentInvite[]
+  // Logistics + status. DRAFT while building, OPEN once invites go out,
+  // FINALIZED once the roster is locked and pools/schedule are generated.
+  status         String    @default("DRAFT") // DRAFT | OPEN | FINALIZED
+  startDate      DateTime?
+  location       String?
+  // Payment structure (illustration only — no real processing). Dollars.
+  entryFee       Int?
+  depositAmount  Int?
+  // Scheduling config.
+  poolPlayGames  Int       @default(3)
+  allowCrossover Boolean   @default(false)
+
+  invites      TournamentInvite[]
+  divisions    TournamentDivision[]
+  fields       Field[]
+  scheduleGames ScheduleGame[]
 
   @@index([directorUserId])
+}
+
+// One competition group within a tournament: an age group at a given NBR level.
+// Two divisions may share an ageGroup with different nbrLevel labels (the
+// "two tournaments in one" concept — e.g. "12U · NBR I" and "12U · NBR II").
+model TournamentDivision {
+  id           String     @id @default(cuid())
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  ageGroup     AgeGroup
+  nbrLevel     String     @default("NBR I")
+  // Target NBR band used to pre-fill the team search for this division.
+  nbrMin       Int?
+  nbrMax       Int?
+  // Cached generatePools() output (PoolResult JSON) once pools are built.
+  poolsJson    Json?
+  // Cached buildBracket() output (rounds JSON) once a bracket is built.
+  bracketJson  Json?
+  createdAt    DateTime   @default(now())
+
+  invites         TournamentInvite[]
+  scheduleGames   ScheduleGame[]
+  advancementRule AdvancementRule?
+
+  @@index([tournamentId])
+}
+
+// A playing field/diamond available to a tournament.
+model Field {
+  id           String     @id @default(cuid())
+  tournamentId String
+  tournament   Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  name         String
+  hasLights    Boolean    @default(false)
+  // Which age groups this field is suitable to host (base-path/fence sizing).
+  allowedAgeGroups AgeGroup[]
+  // Private, TD-only communications/notes (groundskeeper contacts, gate codes…).
+  privateNotes String     @default("")
+  createdAt    DateTime   @default(now())
+
+  scheduleGames ScheduleGame[]
+
+  @@index([tournamentId])
+}
+
+// A scheduled pool-play (or crossover) game on a field at a time slot.
+model ScheduleGame {
+  id           String             @id @default(cuid())
+  tournamentId String
+  tournament   Tournament         @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  divisionId   String
+  division     TournamentDivision @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  // Pool label ("Pool A") for pool play; null for crossover games.
+  poolLabel    String?
+  fieldId      String?
+  field        Field?             @relation(fields: [fieldId], references: [id], onDelete: SetNull)
+  slotLabel    String // e.g. "Sat 9:00 AM"
+  // Team ids (real Team ids, or demo placeholder ids). Stored as scalars — no FK
+  // so demo/real data and historical rosters stay decoupled from Team lifecycle.
+  homeTeamId   String
+  homeTeamName String
+  awayTeamId   String
+  awayTeamName String
+  isCrossover  Boolean            @default(false)
+  umpireId     String?
+  umpire       Umpire?            @relation(fields: [umpireId], references: [id], onDelete: SetNull)
+  createdAt    DateTime           @default(now())
+
+  @@index([tournamentId])
+  @@index([divisionId])
+}
+
+// An umpire in the pool. Optionally linked to a User for self-service.
+model Umpire {
+  id                  String    @id @default(cuid())
+  userId              String?   @unique
+  user                User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name                String
+  email               String?
+  ageGroups           AgeGroup[]
+  available           Boolean   @default(true)
+  willUmpireScrimmages Boolean  @default(false)
+  createdAt           DateTime  @default(now())
+
+  scheduleGames ScheduleGame[]
+  notes         UmpireNote[]
+  feedback      UmpireFeedback[]
+}
+
+// TD-only private evaluation notes about an umpire.
+model UmpireNote {
+  id             String   @id @default(cuid())
+  umpireId       String
+  umpire         Umpire   @relation(fields: [umpireId], references: [id], onDelete: Cascade)
+  directorUserId String
+  body           String
+  createdAt      DateTime @default(now())
+
+  @@index([umpireId, createdAt])
+}
+
+// Future release: confidential coach → umpire feedback (Likert + one comment).
+// Schema present now; the coach-facing UI is stubbed/disabled this release.
+model UmpireFeedback {
+  id           String   @id @default(cuid())
+  umpireId     String
+  umpire       Umpire   @relation(fields: [umpireId], references: [id], onDelete: Cascade)
+  fromUserId   String?
+  likert       Int // 1..5
+  comment      String?
+  confidential Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([umpireId])
+}
+
+// Bracket advancement rules a division uses. presetKey identifies a built-in
+// preset; isCustom marks a director-authored rule.
+model AdvancementRule {
+  id                String             @id @default(cuid())
+  divisionId        String             @unique
+  division          TournamentDivision @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  presetKey         String? // e.g. "balanced" | "pool-winners" | "wildcard"
+  name              String
+  synopsis          String
+  poolWinnersAdvance Int               @default(1)
+  wildcards         Int                @default(0)
+  seedBy            String             @default("POOL_RECORD") // POOL_RECORD | RATING | RUN_DIFF
+  reseed            Boolean            @default(true)
+  isCustom          Boolean            @default(false)
 }
 
 model TournamentInvite {
@@ -358,6 +504,11 @@ model TournamentInvite {
   teamId       String
   team         Team       @relation(fields: [teamId], references: [id], onDelete: Cascade)
   status       String     @default("INVITED") // INVITED | ACCEPTED | DECLINED
+  // Which division (age + NBR level) the team is invited into.
+  divisionId   String?
+  division     TournamentDivision? @relation(fields: [divisionId], references: [id], onDelete: SetNull)
+  // Payment + roster standing (illustration). PENCILED = tentatively penciled in.
+  paymentStatus String    @default("PENCILED") // PENCILED | INVITED | DEPOSIT_PAID | PAID
   createdAt    DateTime   @default(now())
 
   // Conversation thread between the tournament director and the team's coach.

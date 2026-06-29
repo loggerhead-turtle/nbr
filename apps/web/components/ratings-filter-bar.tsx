@@ -77,7 +77,7 @@ export function RatingsFilterBar({
         </label>
         <select id="sort" name="sort" defaultValue={sort} className="input" onChange={submitNow}>
           <option value="name">Alphabetical</option>
-          <option value="rating">Rating</option>
+          <option value="rating">NBR</option>
           <option value="games">Games played</option>
         </select>
       </div>
