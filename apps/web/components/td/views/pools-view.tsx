@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { PoolResultView } from "@/components/pool-result";
 import { formatRating } from "@/lib/format";
+import { PoolEditor } from "./pool-editor";
 import { useTd } from "../lib/td-context";
 import { divisionLabel, SectionTitle, EmptyCard, divisionTeamCount } from "../lib/ui";
 
@@ -36,10 +37,12 @@ function DivisionPools({ divisionId }: { divisionId: string }) {
   const suggested = Math.min(Math.max(2, Math.floor(teamCount / 3)), Math.max(2, teamCount));
   const [numPools, setNumPools] = useState(suggested);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const generate = async () => {
     setBusy(true);
     await act((p) => p.generatePools(t.id, div.id, numPools));
+    setEditing(false);
     setBusy(false);
   };
 
@@ -49,7 +52,7 @@ function DivisionPools({ divisionId }: { divisionId: string }) {
         title={divisionLabel(div)}
         sub={`${teamCount} team${teamCount === 1 ? "" : "s"}`}
         action={
-          teamCount >= 2 ? (
+          editing ? null : teamCount >= 2 ? (
             <div className="flex items-end gap-2">
               <div>
                 <label className="label text-[11px]">Pools</label>
@@ -66,13 +69,25 @@ function DivisionPools({ divisionId }: { divisionId: string }) {
               <button onClick={generate} disabled={busy} className="btn-accent disabled:opacity-50">
                 {busy ? "Generating…" : div.pools ? "Regenerate" : "Generate pools"}
               </button>
+              {div.pools && (
+                <button onClick={() => setEditing(true)} className="btn-ghost">✏️ Edit</button>
+              )}
             </div>
           ) : (
             <span className="text-sm text-slate-400">Add at least 2 teams</span>
           )
         }
       />
-      {div.pools ? (
+      {editing && div.pools ? (
+        <PoolEditor
+          result={div.pools}
+          onCancel={() => setEditing(false)}
+          onSave={async (cols) => {
+            await act((p) => p.setDivisionPools(t.id, div.id, cols));
+            setEditing(false);
+          }}
+        />
+      ) : div.pools ? (
         <PoolResultView result={div.pools} name={`${t.name} — ${divisionLabel(div)}`} formatValue={formatRating} />
       ) : (
         <p className="text-sm text-slate-500">No pools yet for this division.</p>

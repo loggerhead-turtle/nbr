@@ -27,7 +27,13 @@ import { LIVE_SEARCH_KEY } from "./site-settings";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew, triggerRecompute } from "./render-jobs";
 import type { MergeTargetOption } from "./merge-types";
-import { markActivitySeen } from "./activity";
+import {
+  markActivitySeen,
+  markActivityTypeSeen,
+  markAllActivitySeen,
+  ACTIVITY_TYPES,
+  type ActivityType,
+} from "./activity";
 import { sendEmail, emailLayout, siteUrl } from "./email";
 import { getCurrentSeasonYear } from "./season";
 import { setRatingAlgorithm } from "./settings";
@@ -533,6 +539,24 @@ export async function markActivitySeenAction(): Promise<void> {
   await requireAdmin();
   await markActivitySeen();
   revalidatePath("/admin", "layout");
+}
+
+/** Clear one activity section (e.g. just "new users") — explicit, not on visit. */
+export async function clearActivityTypeAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const type = String(formData.get("type") ?? "");
+  if (!(ACTIVITY_TYPES as readonly { type: string }[]).some((t) => t.type === type)) return;
+  await markActivityTypeSeen(type as ActivityType);
+  revalidatePath("/admin", "layout");
+  revalidatePath("/admin/activity");
+}
+
+/** Clear every activity section at once. */
+export async function clearAllActivityAction(): Promise<void> {
+  await requireAdmin();
+  await markAllActivitySeen();
+  revalidatePath("/admin", "layout");
+  revalidatePath("/admin/activity");
 }
 
 export async function setUserRoleAction(formData: FormData): Promise<void> {

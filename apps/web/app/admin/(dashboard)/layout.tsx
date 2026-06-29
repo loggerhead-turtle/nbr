@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { isAdmin } from "@/lib/auth";
 import { logoutAction } from "@/lib/admin-actions";
 import { countDuplicateCandidates } from "@/lib/duplicates";
-import { countNewActivity, getActivitySeenAt } from "@/lib/activity";
+import { getActivitySeenMap, countNewActivityByType } from "@/lib/activity";
 import { countGhostTeams } from "@nbr/db";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -12,8 +12,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const [dupCount, ghostCount, activityCount] = await Promise.all([
     countDuplicateCandidates(),
     countGhostTeams().catch(() => 0),
-    getActivitySeenAt()
-      .then((since) => countNewActivity(since))
+    getActivitySeenMap()
+      .then((m) => countNewActivityByType(m))
+      .then((c) => Object.values(c).reduce((a, b) => a + b, 0))
       .catch(() => 0),
   ]);
 

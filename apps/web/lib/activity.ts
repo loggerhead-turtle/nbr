@@ -40,7 +40,61 @@ const PER_SOURCE = 25;
 const fullName = (u: { firstName: string | null; lastName: string | null } | null) =>
   u ? `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim() : "";
 
-const ACTIVITY_SEEN_KEY = "adminActivitySeenAt";
+const ACTIVITY_SEEN_KEY = "adminActivitySeenAt"; // legacy global fallback
+const ACTIVITY_SEEN_PREFIX = "adminActivitySeenAt_"; // per-section key prefix
+
+const ALL_TYPES = ACTIVITY_TYPES.map((t) => t.type);
+const epochMap = (): Record<ActivityType, Date> =>
+  Object.fromEntries(ALL_TYPES.map((t) => [t, new Date(0)])) as Record<ActivityType, Date>;
+
+/** Per-section "last cleared" timestamps; falls back to the legacy global key. */
+export async function getActivitySeenMap(): Promise<Record<ActivityType, Date>> {
+  try {
+    const rows = await prisma.appSetting.findMany({
+      where: { key: { in: [...ALL_TYPES.map((t) => ACTIVITY_SEEN_PREFIX + t), ACTIVITY_SEEN_KEY] } },
+    });
+    const byKey = new Map(rows.map((r) => [r.key, new Date(r.value)]));
+    const legacy = byKey.get(ACTIVITY_SEEN_KEY) ?? new Date(0);
+    const out = {} as Record<ActivityType, Date>;
+    for (const t of ALL_TYPES) out[t] = byKey.get(ACTIVITY_SEEN_PREFIX + t) ?? legacy;
+    return out;
+  } catch {
+    return epochMap();
+  }
+}
+
+/** Clear one section: stamp its "seen" time to now. */
+export async function markActivityTypeSeen(type: ActivityType): Promise<void> {
+  const key = ACTIVITY_SEEN_PREFIX + type;
+  const now = new Date().toISOString();
+  await prisma.appSetting.upsert({ where: { key }, create: { key, value: now }, update: { value: now } });
+}
+
+/** Clear every section at once. */
+export async function markAllActivitySeen(): Promise<void> {
+  await Promise.all(ALL_TYPES.map((t) => markActivityTypeSeen(t)));
+}
+
+/** New-event count per section, each measured against that section's seen time. */
+export async function countNewActivityByType(
+  seen: Record<ActivityType, Date>,
+): Promise<Record<ActivityType, number>> {
+  try {
+    const [login, user, team, game, claim, scrimmage, report, td] = await Promise.all([
+      prisma.user.count({ where: { lastLoginAt: { gt: seen.login } } }),
+      prisma.user.count({ where: { createdAt: { gt: seen.user } } }),
+      prisma.team.count({ where: { isGhost: false, createdAt: { gt: seen.team } } }),
+      prisma.game.count({ where: { createdAt: { gt: seen.game } } }),
+      prisma.claim.count({ where: { createdAt: { gt: seen.claim } } }),
+      prisma.scrimmageRequest.count({ where: { createdAt: { gt: seen.scrimmage } } }),
+      prisma.report.count({ where: { createdAt: { gt: seen.report } } }),
+      prisma.user.count({ where: { tdRequestedAt: { gt: seen.td } } }),
+    ]);
+    return { login, user, team, game, claim, scrimmage, report, td };
+  } catch {
+    return Object.fromEntries(ALL_TYPES.map((t) => [t, 0])) as Record<ActivityType, number>;
+  }
+}
 
 export async function getActivitySeenAt(): Promise<Date> {
   try {

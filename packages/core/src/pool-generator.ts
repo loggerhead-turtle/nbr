@@ -133,6 +133,23 @@ export function generatePools(
 }
 
 /**
+ * Recompute a full PoolResult from a manual pool arrangement (e.g. after a
+ * director drags teams between pools). Seeds are preserved; only pool totals,
+ * averages, and the balance metrics are recomputed.
+ */
+export function summarizePools(teamsByPool: SeededTeam[][]): PoolResult {
+  const pools = teamsByPool.map((b, i) => summarize(b, i));
+  const totals = pools.map((p) => p.totalRating);
+  return {
+    pools,
+    strengthSpread: totals.length ? Math.max(...totals) - Math.min(...totals) : 0,
+    balanceStdDev: stdDev(totals),
+    numPools: pools.length,
+    numTeams: teamsByPool.reduce((s, b) => s + b.length, 0),
+  };
+}
+
+/**
  * Greedy pairwise swaps between the strongest and weakest pools to reduce the
  * spread in total rating. Never swaps a locked top-seed and never makes the
  * spread worse.
