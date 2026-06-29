@@ -1,7 +1,14 @@
 /** Display helpers shared across pages. */
 
+/**
+ * NBR is shown on a compact scale: the internal rating is divided by 10 and
+ * rounded (e.g. an internal 1954 displays as 195). All user-facing rating/NBR
+ * displays go through this helper so the scale stays consistent.
+ */
+export const NBR_DISPLAY_DIVISOR = 10;
+
 export function formatRating(rating: number): string {
-  return Math.round(rating).toString();
+  return Math.round(rating / NBR_DISPLAY_DIVISOR).toString();
 }
 
 export function formatRecord(w: number, l: number, t: number): string {

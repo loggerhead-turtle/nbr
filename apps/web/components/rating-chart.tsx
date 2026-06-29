@@ -1,3 +1,5 @@
+import { formatRating } from "@/lib/format";
+
 /** Dependency-free SVG sparkline of a team's rating over time. */
 export function RatingChart({
   points,
@@ -50,10 +52,10 @@ export function RatingChart({
         <circle key={i} cx={x(i)} cy={y(p.rating)} r="3" fill="#c1121f" />
       ))}
       <text x={PAD} y={14} className="fill-slate-400 text-[10px]">
-        {Math.round(max)}
+        {formatRating(max)}
       </text>
       <text x={PAD} y={H - 6} className="fill-slate-400 text-[10px]">
-        {Math.round(min)}
+        {formatRating(min)}
       </text>
     </svg>
   );

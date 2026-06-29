@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PoolResultView } from "@/components/pool-result";
+import { formatRating } from "@/lib/format";
 import { useTd } from "../lib/td-context";
 import { divisionLabel, SectionTitle, EmptyCard, divisionTeamCount } from "../lib/ui";
 
@@ -71,7 +72,7 @@ function DivisionPools({ divisionId }: { divisionId: string }) {
         }
       />
       {div.pools ? (
-        <PoolResultView result={div.pools} name={`${t.name} — ${divisionLabel(div)}`} />
+        <PoolResultView result={div.pools} name={`${t.name} — ${divisionLabel(div)}`} formatValue={formatRating} />
       ) : (
         <p className="text-sm text-slate-500">No pools yet for this division.</p>
       )}

@@ -173,14 +173,14 @@ export function buildDemoStore(): DemoStore {
   });
   // Eight age groups; 10U and 12U each split into two NBR levels (two events in one).
   const t1Divs: TdDivision[] = [
-    division("U8", "NBR I", 1450, 1700),
-    division("U9", "NBR I", 1450, 1720),
-    division("U10", "NBR I", 1620, 1850),
-    division("U10", "NBR II", 1420, 1610),
-    division("U11", "NBR I", 1500, 1780),
-    division("U12", "NBR I", 1650, 1880),
-    division("U12", "NBR II", 1440, 1640),
-    division("U13", "NBR I", 1520, 1800),
+    division("U8", "NBR I", 145, 170),
+    division("U9", "NBR I", 145, 172),
+    division("U10", "NBR I", 162, 185),
+    division("U10", "NBR II", 142, 161),
+    division("U11", "NBR I", 150, 178),
+    division("U12", "NBR I", 165, 188),
+    division("U12", "NBR II", 144, 164),
+    division("U13", "NBR I", 152, 180),
   ];
   t1.divisions = t1Divs;
   for (const d of t1Divs) {
@@ -258,9 +258,9 @@ export function buildDemoStore(): DemoStore {
     depositAmount: 200,
   });
   const t2Divs = [
-    division("U11", "NBR I", 1550, 1820),
-    division("U14", "NBR I", 1560, 1840),
-    division("U14", "NBR II", 1430, 1610),
+    division("U11", "NBR I", 155, 182),
+    division("U14", "NBR I", 156, 184),
+    division("U14", "NBR II", 143, 161),
   ];
   t2.divisions = t2Divs;
   t2.invites.push(...makeTeamInvites(t2Divs[0]!.id, "U11", 6, 1700, 230, ["PAID", "DEPOSIT_PAID", "INVITED", "PENCILED"]));

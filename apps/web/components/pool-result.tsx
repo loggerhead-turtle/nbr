@@ -1,7 +1,20 @@
 import type { PoolResult } from "@nbr/core";
 
-/** Renders generated pools as printable cards. Server-renderable (no client JS). */
-export function PoolResultView({ result, name }: { result: PoolResult; name?: string }) {
+/**
+ * Renders generated pools as printable cards. Server-renderable (no client JS).
+ * `formatValue` controls how rating numbers display — the public pool generator
+ * uses raw ratings (default), while the NBR director portal passes a formatter
+ * that shows them on the compact NBR scale.
+ */
+export function PoolResultView({
+  result,
+  name,
+  formatValue = (n) => Math.round(n).toString(),
+}: {
+  result: PoolResult;
+  name?: string;
+  formatValue?: (n: number) => string;
+}) {
   const balanceQuality =
     result.balanceStdDev < 40 ? "Excellent" : result.balanceStdDev < 90 ? "Good" : "Fair";
 
@@ -26,7 +39,7 @@ export function PoolResultView({ result, name }: { result: PoolResult; name?: st
             <div className="flex items-center justify-between bg-navy-900 px-4 py-2.5 text-white">
               <span className="font-bold">{pool.label}</span>
               <span className="text-xs text-navy-100">
-                Avg {Math.round(pool.averageRating)}
+                Avg {formatValue(pool.averageRating)}
               </span>
             </div>
             <ul className="divide-y divide-slate-100">
@@ -42,13 +55,13 @@ export function PoolResultView({ result, name }: { result: PoolResult; name?: st
                     )}
                   </span>
                   <span className="tabular-nums font-semibold text-navy-800">
-                    {Math.round(t.rating)}
+                    {formatValue(t.rating)}
                   </span>
                 </li>
               ))}
             </ul>
             <div className="border-t border-slate-100 bg-slate-50 px-4 py-2 text-xs text-slate-500">
-              Pool strength: {Math.round(pool.totalRating)}
+              Pool strength: {formatValue(pool.totalRating)}
             </div>
           </div>
         ))}

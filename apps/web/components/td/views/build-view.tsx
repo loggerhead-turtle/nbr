@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AGE_GROUPS } from "@nbr/core";
-import { ageGroupLabel } from "@/lib/format";
+import { ageGroupLabel, formatRating } from "@/lib/format";
 import { useTd } from "../lib/td-context";
 import { divisionLabel, SectionTitle } from "../lib/ui";
 import { money } from "../lib/util";
@@ -248,7 +248,7 @@ function DivisionRoster({ divisionId }: { divisionId: string }) {
           .map((i) => (
             <li key={i.id} className="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-3 pr-1 text-sm">
               <span className="font-medium text-slate-700">{i.team.name}</span>
-              {i.team.nbr != null && <span className="tabular-nums text-xs text-navy-700">{i.team.nbr}</span>}
+              {i.team.nbr != null && <span className="tabular-nums text-xs text-navy-700">{formatRating(i.team.nbr)}</span>}
               <button
                 onClick={() => act((p) => p.removeInvite(t.id, i.id))}
                 className="flex h-6 w-6 items-center justify-center rounded-full text-slate-400 hover:bg-rose-50 hover:text-rose-600"

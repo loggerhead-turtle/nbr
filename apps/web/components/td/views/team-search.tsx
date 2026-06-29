@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { formatRating, NBR_DISPLAY_DIVISOR } from "@/lib/format";
 import { useTd } from "../lib/td-context";
 import type { TdTeamRef } from "../lib/types";
 
@@ -42,10 +43,12 @@ export function TeamSearch({
     debounce.current = setTimeout(async () => {
       setSearching(true);
       try {
+        // NBR is shown on the compact scale; the search API works on the raw
+        // internal scale, so scale the entered bounds back up before querying.
         const teams = await port.searchTeams({
           q: q.trim() || undefined,
-          nbrMin: nbrMin.trim() ? Number(nbrMin) : undefined,
-          nbrMax: nbrMax.trim() ? Number(nbrMax) : undefined,
+          nbrMin: nbrMin.trim() ? Number(nbrMin) * NBR_DISPLAY_DIVISOR : undefined,
+          nbrMax: nbrMax.trim() ? Number(nbrMax) * NBR_DISPLAY_DIVISOR : undefined,
           age: defaultAge,
           near: near.trim() || undefined,
         });
@@ -99,7 +102,7 @@ export function TeamSearch({
                 <span className="flex flex-wrap items-center gap-1.5">
                   <span className="font-medium text-slate-800">{h.name}</span>
                   {h.city && <span className="text-xs text-slate-400">{h.city}, {h.state}</span>}
-                  {h.nbr != null && <span className="tabular-nums font-semibold text-navy-700">{h.nbr} NBR</span>}
+                  {h.nbr != null && <span className="tabular-nums font-semibold text-navy-700">{formatRating(h.nbr)} NBR</span>}
                   {h.distanceMiles != null && <span className="text-xs text-slate-400">~{h.distanceMiles} mi</span>}
                 </span>
                 {already ? (
