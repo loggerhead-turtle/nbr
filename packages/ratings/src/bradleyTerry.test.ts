@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeRatingsBT } from "./bradleyTerry";
+import { computeRatingsBT, BT_SCALE } from "./bradleyTerry";
 import type { EngineGame } from "./engine";
 
 function game(home: string, away: string, hs: number, as: number, dayOffset: number): EngineGame {
@@ -145,7 +145,40 @@ describe("computeRatingsBT — age-baseline curve (bt-age-v1)", () => {
     expect(Math.abs(curve.get("U14")! - 1500)).toBeLessThan(50);
   });
 
-  it("widens RD for an age that has no bridge games (rests on the prior)", () => {
+  it("keeps full age separation even when many biased bridges say otherwise", () => {
+    // Reproduces the production failure: lots of cross-age games where the
+    // younger bracket is competitive (only strong young teams play up). A fitted
+    // curve collapses the middle ages to a flat plateau; the fixed curve must NOT.
+    const ages3 = new Map<string, string>([
+      ["a", "U12"], ["b", "U12"], ["c", "U13"], ["d", "U13"], ["e", "U14"], ["f", "U14"],
+    ]);
+    const games: EngineGame[] = [];
+    for (let r = 0; r < 8; r++) {
+      // within-age
+      games.push(game("a", "b", 6, 4, r), game("c", "d", 6, 4, r + 8), game("e", "f", 6, 4, r + 16));
+      // abundant cross-age bridges where the YOUNGER team wins (selection bias)
+      games.push(game("a", "c", 7, 3, r + 24), game("c", "e", 7, 3, r + 32));
+    }
+    const step = 200 / BT_SCALE;
+    const out = computeRatingsBT(games, { lambda: 0.3, ageGroup: ages3, ageStepPrior: step });
+    const c = new Map(out.ageCurve!.map((x) => [x.ageGroup, x.baseline]));
+    // Fixed curve holds the full ~200 pts/year, not a flattened plateau.
+    expect(c.get("U13")! - c.get("U12")!).toBeGreaterThan(150);
+    expect(c.get("U14")! - c.get("U13")!).toBeGreaterThan(150);
+  });
+
+  it("can still learn the curve when fitAgeCurve is enabled", () => {
+    const ages4 = new Map<string, string>([["p", "U10"], ["q", "U10"], ["r", "U16"], ["s", "U16"]]);
+    const games: EngineGame[] = [
+      game("p", "q", 6, 4, 0), game("r", "s", 6, 4, 1),
+      game("r", "p", 9, 1, 2), game("r", "p", 8, 1, 9), game("s", "q", 8, 2, 3),
+    ];
+    const out = computeRatingsBT(games, { lambda: 0.3, ageGroup: ages4, fitAgeCurve: true });
+    const c = new Map(out.ageCurve!.map((x) => [x.ageGroup, x.baseline]));
+    expect(c.get("U16")!).toBeGreaterThan(c.get("U10")!);
+  });
+
+  it("reports bridge-game counts per age (used by the UI)", () => {
     // Two disconnected age islands, no bridges at all.
     const games = [...baseGames];
     const out = computeRatingsBT(games, { lambda: 0.3, ageGroup: ages });
