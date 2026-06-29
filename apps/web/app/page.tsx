@@ -38,8 +38,9 @@ function resolveDivision(sp: Record<string, string | undefined>): {
 
 const SORT_LABELS: Record<string, string> = {
   games: "games played",
-  rating: "rating (high to low)",
-  name: "team name (A–Z)",
+  rating: "rating",
+  name: "team name",
+  record: "record (wins)",
 };
 
 export default async function HomePage({
@@ -55,7 +56,9 @@ export default async function HomePage({
   const ageGroup = division.kind === "age" ? division.value : undefined;
   const classification = division.kind === "class" ? division.value : undefined;
   const includeProvisional = sp.prov === "1";
-  const sort = (sp.sort as "rating" | "name" | "games") || "games";
+  const sort = (sp.sort as "rating" | "name" | "games" | "record") || "games";
+  const dir: "asc" | "desc" | undefined =
+    sp.dir === "asc" || sp.dir === "desc" ? sp.dir : undefined;
   const page = Number(sp.page) || 1;
   const liveSearch = await getLiveSearchEnabled();
 
@@ -65,9 +68,20 @@ export default async function HomePage({
     classification,
     includeProvisional,
     sort,
+    dir,
     page,
     pageSize: 50,
   });
+
+  const effectiveDir: "asc" | "desc" = dir ?? (sort === "name" ? "asc" : "desc");
+  const dirLabel =
+    sort === "name"
+      ? effectiveDir === "asc"
+        ? "A–Z"
+        : "Z–A"
+      : effectiveDir === "desc"
+        ? "high to low"
+        : "low to high";
 
   return (
     <div>
@@ -92,10 +106,16 @@ export default async function HomePage({
           {classification ? `Varsity ${classification}` : ageGroupLabel(ageGroup)}
           {search ? ` · matching “${search}”` : ""}
           {" · "}
-          <span className="text-slate-400">Sorted by {SORT_LABELS[sort]}</span>
+          <span className="text-slate-400">
+            Sorted by {SORT_LABELS[sort]} ({dirLabel})
+          </span>
         </p>
 
-        {rows.length === 0 ? <EmptyState /> : <RatingsTable rows={rows} sort={sort} sp={sp} />}
+        {rows.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <RatingsTable rows={rows} sort={sort} dir={effectiveDir} sp={sp} />
+        )}
 
         <Pagination page={page} total={total} pageSize={50} sp={sp} />
       </section>

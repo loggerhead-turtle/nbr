@@ -24,7 +24,8 @@ export interface RatingsQuery {
   ageGroup?: string;
   classification?: string;
   includeProvisional?: boolean;
-  sort?: "rating" | "name" | "games";
+  sort?: "rating" | "name" | "games" | "record";
+  dir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 }
@@ -58,12 +59,16 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
     where.rating = { is: { isProvisional: false } };
   }
 
+  // Direction defaults to "best first" for metrics (desc) and A→Z for name (asc).
+  const dir: "asc" | "desc" = q.dir ?? (q.sort === "name" ? "asc" : "desc");
   const orderBy: Prisma.TeamOrderByWithRelationInput =
     q.sort === "name"
-      ? { name: "asc" }
+      ? { name: dir }
       : q.sort === "games"
-        ? { rating: { gamesPlayed: "desc" } }
-        : { rating: { rating: "desc" } };
+        ? { rating: { gamesPlayed: dir } }
+        : q.sort === "record"
+          ? { rating: { wins: dir } }
+          : { rating: { rating: dir } };
 
   try {
     const [teams, total] = await Promise.all([
