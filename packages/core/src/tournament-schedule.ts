@@ -225,3 +225,344 @@ function toGame(p: Pairing, field: ScheduleField | null, slot: string): Schedule
     slotLabel: slot,
   };
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Timed, multi-division, field-graded scheduling.
+//
+// Schedules the whole tournament at once (so fields and time slots are never
+// double-booked across divisions), onto real clock times across one or more
+// days. Fields carry a grade (Championship best → D); stronger pools and later
+// bracket rounds are steered toward better fields. Fields without lights may not
+// host a game that would finish after sunset, and no game may finish after the
+// daily hard cutoff.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type FieldGrade = "Championship" | "A" | "B" | "C" | "D";
+export const FIELD_GRADES: FieldGrade[] = ["Championship", "A", "B", "C", "D"];
+export const FIELD_GRADE_RANK: Record<FieldGrade, number> = {
+  Championship: 0,
+  A: 1,
+  B: 2,
+  C: 3,
+  D: 4,
+};
+
+export interface GradedField extends ScheduleField {
+  grade: FieldGrade;
+}
+
+export interface BracketGameInput {
+  /** 0 = first round played (e.g. quarterfinals). */
+  roundIndex: number;
+  roundName: string; // "Quarterfinals" | "Semifinals" | "Final" | "Round of N"
+  homeName: string; // a real team name, "BYE", or "TBD"/"Winner …" placeholder
+  awayName: string;
+}
+
+export interface ScheduleDivisionInput {
+  id: string;
+  ageGroup: string;
+  pools: SchedulePool[];
+  /** Flattened bracket games to place after pool play (optional). */
+  bracketGames?: BracketGameInput[];
+}
+
+export interface TournamentTimeConfig {
+  /** ISO date strings in play order, e.g. ["2026-08-08","2026-08-09"]. */
+  days: string[];
+  dayStartMinutes: number; // minutes from midnight, e.g. 8*60
+  endByMinutes: number; // hard daily cutoff — games must FINISH by this
+  sunsetMinutes: number; // no-light fields must FINISH by this
+  gameDurationMinutes: number; // game time limit
+  poolPlayGamesPerDay: number; // per team per day cap
+  poolPlayGamesTotal: number; // per team target across pool days
+  allowCrossover: boolean;
+  bracketDayIndex: number; // index into `days` that hosts bracket games
+}
+
+export interface TimedGame {
+  divisionId: string;
+  kind: "pool" | "bracket";
+  poolLabel: string | null;
+  roundName: string | null;
+  homeTeamId: string;
+  homeTeamName: string;
+  awayTeamId: string;
+  awayTeamName: string;
+  isCrossover: boolean;
+  fieldId: string | null;
+  fieldName: string | null;
+  fieldGrade: FieldGrade | null;
+  dayIndex: number | null;
+  date: string | null;
+  startMinutes: number | null;
+  slotLabel: string;
+}
+
+export interface TournamentScheduleResult {
+  games: TimedGame[];
+  warnings: string[];
+}
+
+/** Spacing between game start times on a field: time limit + a 15-min buffer. */
+export function slotIntervalFor(durationMinutes: number): number {
+  return durationMinutes + 15;
+}
+
+export function formatClock(min: number): string {
+  let h = Math.floor(min / 60);
+  const m = min % 60;
+  const ap = h < 12 ? "AM" : "PM";
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${m.toString().padStart(2, "0")} ${ap}`;
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+/** Round-robin (+ optional crossover) pairings for one division's pools. */
+function poolPairings(
+  pools: SchedulePool[],
+  target: number,
+  allowCrossover: boolean,
+): Pairing[] {
+  const count = new Map<string, number>();
+  for (const pool of pools) for (const t of pool.teams) count.set(t.id, 0);
+  const selected: Pairing[] = [];
+  const seen = new Set<string>();
+  const key = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+
+  for (const pool of pools) {
+    for (const round of roundRobinRounds(pool.teams)) {
+      for (const [a, b] of round) {
+        if ((count.get(a.id) ?? 0) >= target || (count.get(b.id) ?? 0) >= target) continue;
+        selected.push({ a, b, poolLabel: pool.label, isCrossover: false });
+        seen.add(key(a.id, b.id));
+        count.set(a.id, (count.get(a.id) ?? 0) + 1);
+        count.set(b.id, (count.get(b.id) ?? 0) + 1);
+      }
+    }
+  }
+
+  if (allowCrossover) {
+    const teamPool = new Map<string, string>();
+    const all: ScheduleTeam[] = [];
+    for (const pool of pools)
+      for (const t of pool.teams) {
+        teamPool.set(t.id, pool.label);
+        all.push(t);
+      }
+    let progress = true;
+    while (progress) {
+      progress = false;
+      const under = all.filter((t) => (count.get(t.id) ?? 0) < target);
+      for (let i = 0; i < under.length; i++) {
+        for (let j = i + 1; j < under.length; j++) {
+          const a = under[i]!;
+          const b = under[j]!;
+          if ((count.get(a.id) ?? 0) >= target || (count.get(b.id) ?? 0) >= target) continue;
+          if (teamPool.get(a.id) === teamPool.get(b.id)) continue;
+          if (seen.has(key(a.id, b.id))) continue;
+          selected.push({ a, b, poolLabel: null, isCrossover: true });
+          seen.add(key(a.id, b.id));
+          count.set(a.id, (count.get(a.id) ?? 0) + 1);
+          count.set(b.id, (count.get(b.id) ?? 0) + 1);
+          progress = true;
+        }
+      }
+    }
+  }
+  return selected;
+}
+
+interface Slot {
+  dayIndex: number;
+  start: number;
+}
+
+export function buildTournamentSchedule(
+  divisions: ScheduleDivisionInput[],
+  fields: GradedField[],
+  cfg: TournamentTimeConfig,
+): TournamentScheduleResult {
+  const warnings: string[] = [];
+  const duration = cfg.gameDurationMinutes;
+  const interval = slotIntervalFor(duration);
+
+  // Daily slot start times that fit before the hard cutoff.
+  const daySlots: number[] = [];
+  for (let t = cfg.dayStartMinutes; t + duration <= cfg.endByMinutes; t += interval) {
+    daySlots.push(t);
+  }
+  if (daySlots.length === 0) {
+    warnings.push("No game slots fit between the start time and the end-by cutoff.");
+    return { games: [], warnings };
+  }
+  if (fields.length === 0) {
+    warnings.push("No fields configured — add fields to generate a schedule.");
+    return { games: [], warnings };
+  }
+
+  const sortedFields = [...fields].sort(
+    (a, b) => FIELD_GRADE_RANK[a.grade] - FIELD_GRADE_RANK[b.grade],
+  );
+  const bracketDay = Math.min(Math.max(0, cfg.bracketDayIndex), cfg.days.length - 1);
+  const poolDayIndices = cfg.days
+    .map((_, i) => i)
+    .filter((i) => i < bracketDay || cfg.days.length === 1);
+  if (poolDayIndices.length === 0) poolDayIndices.push(0);
+
+  // Occupancy. Key by `${dayIndex}@${start}`.
+  const fieldBusy = new Map<string, Set<string>>();
+  const teamBusy = new Map<string, Set<string>>();
+  const teamDayCount = new Map<string, number>(); // `${teamId}#${dayIndex}`
+  const cellKey = (d: number, s: number) => `${d}@${s}`;
+  const games: TimedGame[] = [];
+
+  const fieldFree = (d: number, s: number, fid: string) =>
+    !(fieldBusy.get(cellKey(d, s))?.has(fid) ?? false);
+  const teamFree = (d: number, s: number, tid: string) =>
+    !(teamBusy.get(cellKey(d, s))?.has(tid) ?? false);
+
+  const occupy = (d: number, s: number, fid: string, ids: string[]) => {
+    const k = cellKey(d, s);
+    if (!fieldBusy.has(k)) fieldBusy.set(k, new Set());
+    if (!teamBusy.has(k)) teamBusy.set(k, new Set());
+    fieldBusy.get(k)!.add(fid);
+    for (const id of ids) teamBusy.get(k)!.add(id);
+  };
+
+  const lightsOk = (f: GradedField, start: number) =>
+    f.hasLights || start + duration <= cfg.sunsetMinutes;
+  const ageOk = (f: GradedField, age: string) =>
+    f.allowedAgeGroups.length === 0 || f.allowedAgeGroups.includes(age);
+
+  // ── Pool play ──────────────────────────────────────────────────────────────
+  interface Pending {
+    div: ScheduleDivisionInput;
+    poolRank: number;
+    p: Pairing;
+  }
+  const pending: Pending[] = [];
+  divisions.forEach((div, divIndex) => {
+    const pairs = poolPairings(div.pools, cfg.poolPlayGamesTotal, cfg.allowCrossover);
+    for (const p of pairs) {
+      const poolRank = p.poolLabel ? div.pools.findIndex((x) => x.label === p.poolLabel) : div.pools.length;
+      pending.push({ div, poolRank: poolRank * 100 + divIndex, p });
+    }
+  });
+  // Stronger pools first (Pool A across divisions) so they claim better fields.
+  pending.sort((a, b) => a.poolRank - b.poolRank);
+
+  for (const { div, p } of pending) {
+    let placed = false;
+    // Prefer earliest day, then best field grade, then earliest time.
+    outer: for (const d of poolDayIndices) {
+      const tA = `${p.a.id}#${d}`;
+      const tB = `${p.b.id}#${d}`;
+      if ((teamDayCount.get(tA) ?? 0) >= cfg.poolPlayGamesPerDay) continue;
+      if ((teamDayCount.get(tB) ?? 0) >= cfg.poolPlayGamesPerDay) continue;
+      for (const f of sortedFields) {
+        if (!ageOk(f, div.ageGroup)) continue;
+        for (const start of daySlots) {
+          if (!lightsOk(f, start)) continue;
+          if (!fieldFree(d, start, f.id)) continue;
+          if (!teamFree(d, start, p.a.id) || !teamFree(d, start, p.b.id)) continue;
+          occupy(d, start, f.id, [p.a.id, p.b.id]);
+          teamDayCount.set(tA, (teamDayCount.get(tA) ?? 0) + 1);
+          teamDayCount.set(tB, (teamDayCount.get(tB) ?? 0) + 1);
+          games.push({
+            divisionId: div.id,
+            kind: "pool",
+            poolLabel: p.poolLabel,
+            roundName: null,
+            homeTeamId: p.a.id,
+            homeTeamName: p.a.name,
+            awayTeamId: p.b.id,
+            awayTeamName: p.b.name,
+            isCrossover: p.isCrossover,
+            fieldId: f.id,
+            fieldName: f.name,
+            fieldGrade: f.grade,
+            dayIndex: d,
+            date: cfg.days[d] ?? null,
+            startMinutes: start,
+            slotLabel: `${dayLabel(cfg.days[d]!)} · ${formatClock(start)} · ${f.name}`,
+          });
+          placed = true;
+          break outer;
+        }
+      }
+    }
+    if (!placed) warnings.push(`Couldn't place a ${div.ageGroup} pool game — not enough field time.`);
+  }
+
+  // ── Bracket play ─────────────────────────────────────────────────────────--
+  interface PendingBracket {
+    div: ScheduleDivisionInput;
+    g: BracketGameInput;
+    maxRound: number;
+  }
+  const bpending: PendingBracket[] = [];
+  for (const div of divisions) {
+    const bg = div.bracketGames ?? [];
+    if (bg.length === 0) continue;
+    const maxRound = Math.max(...bg.map((x) => x.roundIndex));
+    for (const g of bg) bpending.push({ div, g, maxRound });
+  }
+  // Earlier rounds first (so QF gets earlier times than the Final).
+  bpending.sort((a, b) => a.g.roundIndex - b.g.roundIndex);
+
+  for (const { div, g, maxRound } of bpending) {
+    // Later rounds prefer better fields: Final → Championship.
+    const targetRank = Math.min(4, Math.max(0, maxRound - g.roundIndex));
+    // Bracket rounds advance in time: round r can't start before this.
+    const earliest = cfg.dayStartMinutes + g.roundIndex * interval;
+    const candidates = [...sortedFields].sort(
+      (a, b) =>
+        Math.abs(FIELD_GRADE_RANK[a.grade] - targetRank) -
+          Math.abs(FIELD_GRADE_RANK[b.grade] - targetRank) ||
+        FIELD_GRADE_RANK[a.grade] - FIELD_GRADE_RANK[b.grade],
+    );
+    const homeId = `${div.id}:${g.roundName}:${g.homeName}`;
+    const awayId = `${div.id}:${g.roundName}:${g.awayName}`;
+    let placed = false;
+    for (const start of daySlots) {
+      if (start < earliest) continue;
+      for (const f of candidates) {
+        if (!ageOk(f, div.ageGroup)) continue;
+        if (!lightsOk(f, start)) continue;
+        if (!fieldFree(bracketDay, start, f.id)) continue;
+        occupy(bracketDay, start, f.id, []);
+        games.push({
+          divisionId: div.id,
+          kind: "bracket",
+          poolLabel: null,
+          roundName: g.roundName,
+          homeTeamId: homeId,
+          homeTeamName: g.homeName,
+          awayTeamId: awayId,
+          awayTeamName: g.awayName,
+          isCrossover: false,
+          fieldId: f.id,
+          fieldName: f.name,
+          fieldGrade: f.grade,
+          dayIndex: bracketDay,
+          date: cfg.days[bracketDay] ?? null,
+          startMinutes: start,
+          slotLabel: `${dayLabel(cfg.days[bracketDay]!)} · ${formatClock(start)} · ${f.name}`,
+        });
+        placed = true;
+        break;
+      }
+      if (placed) break;
+    }
+    if (!placed) warnings.push(`Couldn't place a ${div.ageGroup} ${g.roundName} game — not enough field time.`);
+  }
+
+  return { games, warnings };
+}

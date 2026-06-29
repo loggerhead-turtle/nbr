@@ -8,11 +8,13 @@
 
 import {
   generatePools,
-  buildSchedule as coreBuildSchedule,
+  buildTournamentSchedule,
   buildBracket as coreBuildBracket,
   type PoolTeam,
-  type SchedulePool,
-  type ScheduleField,
+  type GradedField,
+  type ScheduleDivisionInput,
+  type BracketGameInput,
+  type BracketResult,
   type BracketStandingTeam,
 } from "@nbr/core";
 import type {
@@ -22,6 +24,7 @@ import type {
   AddFieldInput,
   ScheduleOptionsInput,
   RegisterUmpireInput,
+  TournamentPatch,
 } from "./td-port";
 import type {
   TdTournament,
@@ -32,8 +35,24 @@ import type {
   PaymentStatus,
   TeamSearchParams,
 } from "./types";
-import { uid, nowIso } from "./util";
+import { uid, nowIso, parseHM, enumerateDays } from "./util";
 import { buildDemoStore, type DemoStore } from "./demo-seed";
+
+/** Flatten a generated bracket into placeable games (round-0 byes omitted). */
+function flattenBracket(bracket: BracketResult): BracketGameInput[] {
+  const out: BracketGameInput[] = [];
+  bracket.rounds.forEach((round, ri) => {
+    round.matchups.forEach((m) => {
+      if (ri === 0) {
+        if (!m.home.team || !m.away.team) return; // a bye — no game played
+        out.push({ roundIndex: ri, roundName: round.name, homeName: m.home.team.name, awayName: m.away.team.name });
+      } else {
+        out.push({ roundIndex: ri, roundName: round.name, homeName: "TBD", awayName: "TBD" });
+      }
+    });
+  });
+  return out;
+}
 
 const KEY = "nbr-demo-td-v1";
 const VERSION = 1;
@@ -104,11 +123,18 @@ export class SessionTdPort implements TdDataPort {
       name: input.name,
       status: "DRAFT",
       startDate: input.startDate ?? null,
+      endDate: input.startDate ?? null,
       location: input.location ?? null,
       entryFee: input.entryFee ?? null,
       depositAmount: input.depositAmount ?? null,
       poolPlayGames: 3,
+      poolPlayGamesPerDay: 2,
       allowCrossover: false,
+      dayStartTime: "08:00",
+      gamesEndBy: "21:00",
+      sunsetTime: "20:15",
+      gameDurationMinutes: 105,
+      bracketDayIndex: 0,
       divisions: [],
       invites: [],
       fields: [],
@@ -122,10 +148,7 @@ export class SessionTdPort implements TdDataPort {
     return clone(t);
   }
 
-  async updateTournament(
-    id: string,
-    patch: Partial<CreateTournamentInput & { status: string; poolPlayGames: number; allowCrossover: boolean }>,
-  ): Promise<void> {
+  async updateTournament(id: string, patch: TournamentPatch): Promise<void> {
     const t = this.tournament(id);
     Object.assign(t, patch);
     this.persist();
@@ -258,6 +281,7 @@ export class SessionTdPort implements TdDataPort {
       id: uid("field"),
       name: input.name,
       hasLights: input.hasLights,
+      grade: input.grade,
       allowedAgeGroups: input.allowedAgeGroups,
       privateNotes: input.privateNotes ?? "",
     });
@@ -279,45 +303,73 @@ export class SessionTdPort implements TdDataPort {
 
   async buildSchedule(tournamentId: string, options: ScheduleOptionsInput): Promise<void> {
     const t = this.tournament(tournamentId);
-    t.poolPlayGames = options.poolPlayGames;
-    t.allowCrossover = options.allowCrossover;
-    const games: TdTournament["schedule"] = [];
-    const fields: ScheduleField[] = t.fields.map((f) => ({
+    // Persist the chosen scheduling config on the tournament.
+    Object.assign(t, {
+      poolPlayGames: options.poolPlayGames,
+      poolPlayGamesPerDay: options.poolPlayGamesPerDay,
+      allowCrossover: options.allowCrossover,
+      startDate: options.startDate,
+      endDate: options.endDate,
+      dayStartTime: options.dayStartTime,
+      gamesEndBy: options.gamesEndBy,
+      sunsetTime: options.sunsetTime,
+      gameDurationMinutes: options.gameDurationMinutes,
+      bracketDayIndex: options.bracketDayIndex,
+    });
+
+    const fields: GradedField[] = t.fields.map((f) => ({
       id: f.id,
       name: f.name,
       hasLights: f.hasLights,
       allowedAgeGroups: f.allowedAgeGroups,
+      grade: f.grade,
     }));
-    for (const div of t.divisions) {
-      if (!div.pools) continue;
-      const pools: SchedulePool[] = div.pools.pools.map((p) => ({
-        label: p.label,
-        teams: p.teams.map((tm) => ({ id: tm.id, name: tm.name })),
+    const divisions: ScheduleDivisionInput[] = t.divisions
+      .filter((d) => d.pools)
+      .map((d) => ({
+        id: d.id,
+        ageGroup: d.ageGroup,
+        pools: d.pools!.pools.map((p) => ({
+          label: p.label,
+          teams: p.teams.map((tm) => ({ id: tm.id, name: tm.name })),
+        })),
+        bracketGames: d.bracket ? flattenBracket(d.bracket) : undefined,
       }));
-      const result = coreBuildSchedule(pools, fields, {
-        ageGroup: div.ageGroup,
-        poolPlayGames: options.poolPlayGames,
-        allowCrossover: options.allowCrossover,
-      });
-      for (const g of result.games) {
-        games.push({
-          id: uid("game"),
-          divisionId: div.id,
-          poolLabel: g.poolLabel,
-          fieldId: g.fieldId,
-          fieldName: g.fieldName,
-          slotLabel: g.slotLabel,
-          homeTeamId: g.homeTeamId,
-          homeTeamName: g.homeTeamName,
-          awayTeamId: g.awayTeamId,
-          awayTeamName: g.awayTeamName,
-          isCrossover: g.isCrossover,
-          umpireId: null,
-        });
-      }
-    }
-    t.schedule = games;
-    if (games.length > 0) t.status = "FINALIZED";
+
+    const days = enumerateDays(options.startDate, options.endDate);
+    const result = buildTournamentSchedule(divisions, fields, {
+      days,
+      dayStartMinutes: parseHM(options.dayStartTime),
+      endByMinutes: parseHM(options.gamesEndBy),
+      sunsetMinutes: parseHM(options.sunsetTime),
+      gameDurationMinutes: options.gameDurationMinutes,
+      poolPlayGamesPerDay: options.poolPlayGamesPerDay,
+      poolPlayGamesTotal: options.poolPlayGames,
+      allowCrossover: options.allowCrossover,
+      bracketDayIndex: Math.min(options.bracketDayIndex, days.length - 1),
+    });
+
+    t.schedule = result.games.map((g) => ({
+      id: uid("game"),
+      divisionId: g.divisionId,
+      kind: g.kind,
+      poolLabel: g.poolLabel,
+      roundName: g.roundName,
+      fieldId: g.fieldId,
+      fieldName: g.fieldName,
+      fieldGrade: g.fieldGrade,
+      dayIndex: g.dayIndex,
+      date: g.date,
+      startMinutes: g.startMinutes,
+      slotLabel: g.slotLabel,
+      homeTeamId: g.homeTeamId,
+      homeTeamName: g.homeTeamName,
+      awayTeamId: g.awayTeamId,
+      awayTeamName: g.awayTeamName,
+      isCrossover: g.isCrossover,
+      umpireId: null,
+    }));
+    if (t.schedule.length > 0) t.status = "FINALIZED";
     this.persist();
   }
 
