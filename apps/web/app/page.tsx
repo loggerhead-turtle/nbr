@@ -1,22 +1,23 @@
 import Link from "next/link";
 import { getRatings } from "@/lib/queries";
-import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
-import { ProvisionalBadge, GhostBadge } from "@/components/badges";
-import { TeamMedallion } from "@/components/team-medallion";
+import { ageGroupLabel } from "@/lib/format";
 import { ScrimmageFinderCard } from "@/components/scrimmage-finder-card";
 import { RatingsFilterBar } from "@/components/ratings-filter-bar";
-import { teamMedallion } from "@/lib/medallion";
+import { RatingsTable } from "@/components/ratings-table";
 import { getLiveSearchEnabled } from "@/lib/site-settings";
 import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
 export const revalidate = 3600; // ISR: static-fast, refreshed hourly
 
-const DEFAULT_DIVISION = "12U";
+// Must be a valid AGE_GROUPS value ("U12"), not the display label ("12U") —
+// otherwise it matches no option (the filter falls back to the first, 8U) and
+// the query gets an invalid age group and returns nothing.
+const DEFAULT_DIVISION = "U12";
 
 /**
- * Resolve the single division to show. Accepts a `division` token ("14U" for an
+ * Resolve the single division to show. Accepts a `division` token ("U14" for an
  * age group, "v:3A" for a varsity class), falls back to legacy ?age/?class
- * links, and defaults to 14U. The public list is never a mixed cross-age view.
+ * links, and defaults to 12U. The public list is never a mixed cross-age view.
  */
 function resolveDivision(sp: Record<string, string | undefined>): {
   kind: "age" | "class";
@@ -35,6 +36,12 @@ function resolveDivision(sp: Record<string, string | undefined>): {
   return { kind: "age", value: DEFAULT_DIVISION, token: DEFAULT_DIVISION };
 }
 
+const SORT_LABELS: Record<string, string> = {
+  games: "games played",
+  rating: "rating (high to low)",
+  name: "team name (A–Z)",
+};
+
 export default async function HomePage({
   searchParams,
 }: {
@@ -43,12 +50,12 @@ export default async function HomePage({
   const sp = await searchParams;
   const search = sp.q?.trim() || undefined;
   // The public ratings always show a single division (one age group or one
-  // varsity class) — never a mixed cross-age list. Default to 14U.
+  // varsity class) — never a mixed cross-age list. Default to 12U.
   const division = resolveDivision(sp);
   const ageGroup = division.kind === "age" ? division.value : undefined;
   const classification = division.kind === "class" ? division.value : undefined;
   const includeProvisional = sp.prov === "1";
-  const sort = (sp.sort as "rating" | "name" | "games") || "name";
+  const sort = (sp.sort as "rating" | "name" | "games") || "games";
   const page = Number(sp.page) || 1;
   const liveSearch = await getLiveSearchEnabled();
 
@@ -84,78 +91,11 @@ export default async function HomePage({
           {" · "}
           {classification ? `Varsity ${classification}` : ageGroupLabel(ageGroup)}
           {search ? ` · matching “${search}”` : ""}
+          {" · "}
+          <span className="text-slate-400">Sorted by {SORT_LABELS[sort]}</span>
         </p>
 
-        {rows.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <div className="card overflow-hidden">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-navy-900 text-xs uppercase tracking-wide text-navy-100">
-                <tr>
-                  <th className="px-4 py-3">#</th>
-                  <th className="px-4 py-3">Team</th>
-                  <th className="px-4 py-3">Class / Age</th>
-                  <th className="px-4 py-3 text-right">Record</th>
-                  <th className="px-4 py-3 text-right">NBR</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((r, i) => {
-                  const rank = !includeProvisional ? (page - 1) * 50 + i + 1 : null;
-                  const tier = teamMedallion({
-                    isGhost: r.isGhost,
-                    hasApprovedClaim: r.hasApprovedClaim,
-                  });
-                  return (
-                    <tr key={r.teamId} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 font-semibold text-slate-400">
-                        {rank ?? "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="flex items-center gap-1.5">
-                          <Link
-                            href={`/teams/${r.slug}`}
-                            className={`font-semibold hover:underline ${
-                              r.isGhost ? "text-slate-400" : "text-navy-800"
-                            }`}
-                          >
-                            {r.name}
-                          </Link>
-                          <TeamMedallion tier={tier} />
-                          {tier === "gray" && (
-                            <Link
-                              href={`/claim/${r.slug}`}
-                              className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                            >
-                              Claim team
-                            </Link>
-                          )}
-                        </span>
-                        <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
-                          {r.city ? <span>{r.city}, {r.state}</span> : <span>{r.state}</span>}
-                          {r.isProvisional && <ProvisionalBadge />}
-                          {r.isGhost && <GhostBadge />}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {r.classification ? `Varsity ${r.classification}` : ageGroupLabel(r.ageGroup)}
-                      </td>
-                      <td className="px-4 py-3 text-right tabular-nums text-slate-600">
-                        {formatRecord(r.wins, r.losses, r.ties)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="text-lg font-bold tabular-nums text-navy-900">
-                          {formatRating(r.rating)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {rows.length === 0 ? <EmptyState /> : <RatingsTable rows={rows} sort={sort} sp={sp} />}
 
         <Pagination page={page} total={total} pageSize={50} sp={sp} />
       </section>

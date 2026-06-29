@@ -44,7 +44,14 @@ export async function signupAction(_prev: AccountState, formData: FormData): Pro
   if (existing) return { error: "An account with that email already exists. Try signing in." };
 
   const user = await prisma.user.create({
-    data: { firstName, lastName, email, phone: phone || null, passwordHash: await hashPassword(password) },
+    data: {
+      firstName,
+      lastName,
+      email,
+      phone: phone || null,
+      passwordHash: await hashPassword(password),
+      lastLoginAt: new Date(),
+    },
   });
   const store = await cookies();
   store.set(USER_COOKIE, createUserSession(user.id), userCookieOptions);
@@ -60,6 +67,7 @@ export async function loginUserAction(_prev: AccountState, formData: FormData): 
   if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
     return { error: "Incorrect email or password." };
   }
+  await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   const store = await cookies();
   store.set(USER_COOKIE, createUserSession(user.id), userCookieOptions);
   redirect(next);

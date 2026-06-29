@@ -9,6 +9,7 @@ import {
   GameStatus,
   findCrossAgeMergeArtifacts,
   repairCrossAgeMerge,
+  deleteExactNameGhosts,
 } from "@nbr/db";
 import {
   createTeamSchema,
@@ -26,6 +27,7 @@ import { LIVE_SEARCH_KEY } from "./site-settings";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew, triggerRecompute } from "./render-jobs";
 import type { MergeTargetOption } from "./merge-types";
+import { markActivitySeen } from "./activity";
 import { sendEmail, emailLayout, siteUrl } from "./email";
 import { getCurrentSeasonYear } from "./season";
 import { setRatingAlgorithm } from "./settings";
@@ -471,6 +473,21 @@ export async function mergeGhostAction(formData: FormData): Promise<void> {
   revalidatePath("/");
 }
 
+/**
+ * Bulk-delete every ghost whose exact name matches a single verified (GameChanger)
+ * team — the ghost and its (duplicate) games are removed; the verified team is
+ * kept. Recompute afterward since the game graph changed.
+ */
+export async function deleteExactNameGhostsAction(): Promise<void> {
+  await requireAdmin();
+  const { deleted } = await deleteExactNameGhosts();
+  if (deleted > 0) await triggerRecompute();
+  revalidatePath("/admin/ghosts");
+  revalidatePath("/admin/duplicates");
+  revalidatePath("/admin/teams");
+  revalidatePath("/");
+}
+
 /** Search real (non-ghost) teams to hand-pick a merge target for a ghost. */
 export async function searchMergeTargets(query: string): Promise<MergeTargetOption[]> {
   await requireAdmin();
@@ -509,6 +526,13 @@ export async function repairBadMergesAction(formData: FormData): Promise<void> {
   revalidatePath("/admin/bad-merges");
   revalidatePath("/admin/ghosts");
   revalidatePath("/");
+}
+
+/** Mark the admin activity feed as seen (clears the nav "new" badge). */
+export async function markActivitySeenAction(): Promise<void> {
+  await requireAdmin();
+  await markActivitySeen();
+  revalidatePath("/admin", "layout");
 }
 
 export async function setUserRoleAction(formData: FormData): Promise<void> {

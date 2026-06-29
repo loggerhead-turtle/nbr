@@ -27,6 +27,9 @@ export {
   repairCrossAgeMerge,
   getGhostTeamsWithSuggestions,
   countGhostTeams,
+  findExactNameGhostMatches,
+  countExactNameGhostMatches,
+  deleteExactNameGhosts,
 } from "./teams";
 export type {
   BadMergeFinding,
@@ -34,4 +37,5 @@ export type {
   AutoMergeTarget,
   GhostTeamWithSuggestions,
   GhostMergeSuggestion,
+  ExactGhostMatch,
 } from "./teams";
