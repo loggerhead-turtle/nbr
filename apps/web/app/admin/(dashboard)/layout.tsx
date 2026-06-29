@@ -60,6 +60,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               </span>
             )}
           </Link>
+          <Link
+            href="/admin/bad-merges"
+            className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Bad merges
+          </Link>
           <Link href="/admin/users" className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100">
             Users
           </Link>

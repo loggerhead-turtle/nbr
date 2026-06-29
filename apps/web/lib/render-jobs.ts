@@ -53,3 +53,8 @@ export async function triggerScrapeTeam(gcTeamId: string | null | undefined): Pr
 export async function triggerScrapeNew(): Promise<void> {
   await postJob("pnpm --filter @nbr/worker scrape-new");
 }
+
+/** Recompute all ratings (e.g. after an admin repairs/merges teams). */
+export async function triggerRecompute(): Promise<void> {
+  await postJob("pnpm --filter @nbr/worker recompute");
+}
