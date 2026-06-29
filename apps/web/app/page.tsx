@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { getRatings } from "@/lib/queries";
-import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
-import { ProvisionalBadge, GhostBadge } from "@/components/badges";
-import { TeamMedallion } from "@/components/team-medallion";
+import { ageGroupLabel } from "@/lib/format";
 import { ScrimmageFinderCard } from "@/components/scrimmage-finder-card";
 import { RatingsFilterBar } from "@/components/ratings-filter-bar";
-import { teamMedallion } from "@/lib/medallion";
+import { RatingsTable } from "@/components/ratings-table";
 import { getLiveSearchEnabled } from "@/lib/site-settings";
 import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
@@ -43,51 +41,6 @@ const SORT_LABELS: Record<string, string> = {
   rating: "rating (high to low)",
   name: "team name (A–Z)",
 };
-
-/** Build a homepage URL with one query param changed, resetting pagination. */
-function withParam(sp: Record<string, string | undefined>, key: string, value: string): string {
-  const params = new URLSearchParams();
-  for (const [k, v] of Object.entries(sp)) {
-    if (v && k !== "page" && k !== key) params.set(k, v);
-  }
-  params.set(key, value);
-  return `/?${params.toString()}`;
-}
-
-/** A clickable column header that sorts the table by `col`. */
-function SortHeader({
-  label,
-  col,
-  sort,
-  sp,
-  align,
-  className = "",
-}: {
-  label: string;
-  col: "name" | "games" | "rating";
-  sort: string;
-  sp: Record<string, string | undefined>;
-  align?: "right";
-  className?: string;
-}) {
-  const active = sort === col;
-  return (
-    <th className={`px-3 py-3 sm:px-4 ${align === "right" ? "text-right" : ""} ${className}`}>
-      <Link
-        href={withParam(sp, "sort", col)}
-        className={`inline-flex items-center gap-1 hover:text-white ${
-          active ? "text-white" : ""
-        }`}
-        title={`Sort by ${SORT_LABELS[col]}`}
-      >
-        {label}
-        <span aria-hidden className={active ? "" : "opacity-30"}>
-          {active ? (col === "name" ? "▲" : "▼") : "↕"}
-        </span>
-      </Link>
-    </th>
-  );
-}
 
 export default async function HomePage({
   searchParams,
@@ -142,87 +95,7 @@ export default async function HomePage({
           <span className="text-slate-400">Sorted by {SORT_LABELS[sort]}</span>
         </p>
 
-        {rows.length === 0 ? (
-          <EmptyState />
-        ) : (
-          <div className="card overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-navy-900 text-xs uppercase tracking-wide text-navy-100">
-                <tr>
-                  <SortHeader label="Team" col="name" sort={sort} sp={sp} />
-                  <th className="hidden px-3 py-3 sm:px-4 md:table-cell">Class / Age</th>
-                  <SortHeader
-                    label="GP"
-                    col="games"
-                    sort={sort}
-                    sp={sp}
-                    align="right"
-                    className="hidden sm:table-cell"
-                  />
-                  <th className="hidden px-3 py-3 text-right sm:table-cell sm:px-4">Record</th>
-                  <SortHeader label="Rating" col="rating" sort={sort} sp={sp} align="right" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {rows.map((r) => {
-                  const tier = teamMedallion({
-                    isGhost: r.isGhost,
-                    hasApprovedClaim: r.hasApprovedClaim,
-                  });
-                  return (
-                    <tr key={r.teamId} className="hover:bg-slate-50">
-                      <td className="px-3 py-3 sm:px-4">
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <Link
-                            href={`/teams/${r.slug}`}
-                            className={`font-semibold hover:underline ${
-                              r.isGhost ? "text-slate-400" : "text-navy-800"
-                            }`}
-                          >
-                            {r.name}
-                          </Link>
-                          <TeamMedallion tier={tier} />
-                          {tier === "gray" && (
-                            <Link
-                              href={`/claim/${r.slug}`}
-                              className="rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                            >
-                              Claim team
-                            </Link>
-                          )}
-                        </span>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-                          {r.city ? <span>{r.city}, {r.state}</span> : <span>{r.state}</span>}
-                          {/* Division is hidden as its own column on mobile; show it inline there. */}
-                          <span className="md:hidden">
-                            ·{" "}
-                            {r.classification ? `Varsity ${r.classification}` : ageGroupLabel(r.ageGroup)}
-                          </span>
-                          {r.isProvisional && <ProvisionalBadge />}
-                          {r.isGhost && <GhostBadge />}
-                        </div>
-                      </td>
-                      <td className="hidden px-3 py-3 text-slate-600 sm:px-4 md:table-cell">
-                        {r.classification ? `Varsity ${r.classification}` : ageGroupLabel(r.ageGroup)}
-                      </td>
-                      <td className="hidden px-3 py-3 text-right tabular-nums text-slate-600 sm:table-cell sm:px-4">
-                        {r.gamesPlayed}
-                      </td>
-                      <td className="hidden px-3 py-3 text-right tabular-nums text-slate-600 sm:table-cell sm:px-4">
-                        {formatRecord(r.wins, r.losses, r.ties)}
-                      </td>
-                      <td className="px-3 py-3 text-right sm:px-4">
-                        <span className="text-lg font-bold tabular-nums text-navy-900">
-                          {formatRating(r.rating)}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {rows.length === 0 ? <EmptyState /> : <RatingsTable rows={rows} sort={sort} sp={sp} />}
 
         <Pagination page={page} total={total} pageSize={50} sp={sp} />
       </section>
