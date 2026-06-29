@@ -17,6 +17,7 @@ import type {
   TeamSearchParams,
   FieldGrade,
 } from "./types";
+import type { SeededTeam } from "@nbr/core";
 
 export type TournamentPatch = Partial<
   Pick<
@@ -104,6 +105,8 @@ export interface TdDataPort {
 
   // Pools
   generatePools(tournamentId: string, divisionId: string, numPools: number): Promise<void>;
+  /** Persist a manually-edited pool arrangement (drag-and-drop). */
+  setDivisionPools(tournamentId: string, divisionId: string, teamsByPool: SeededTeam[][]): Promise<void>;
 
   // Fields + scheduling
   addField(tournamentId: string, input: AddFieldInput): Promise<void>;
@@ -111,6 +114,10 @@ export interface TdDataPort {
   removeField(tournamentId: string, fieldId: string): Promise<void>;
   buildSchedule(tournamentId: string, options: ScheduleOptionsInput): Promise<void>;
   clearSchedule(tournamentId: string): Promise<void>;
+  /** Granular: move a single scheduled game to a different field. */
+  setGameField(tournamentId: string, gameId: string, fieldId: string | null): Promise<void>;
+  /** Bulk: move every game on one field to another field. */
+  reassignFieldGames(tournamentId: string, fromFieldId: string, toFieldId: string): Promise<void>;
 
   // Umpires (TD pool)
   listUmpires(): Promise<TdUmpire[]>;

@@ -6,6 +6,7 @@ import { getCurrentUser, isCurrentUserAdmin } from "@/lib/user-auth";
 import { logoutUserAction } from "@/lib/account-actions";
 import { respondScrimmageRequestAction, cancelScrimmageRequestAction } from "@/lib/scrimmage-actions";
 import { respondTournamentInviteAction } from "@/lib/tournament-actions";
+import { markAllMessagesReadAction } from "@/lib/message-actions";
 import { ScrimmageSettings } from "@/components/account/scrimmage-settings";
 import { TeamWebsiteForm } from "@/components/account/team-website-form";
 import { TdRequestForm } from "@/components/account/td-request";
@@ -149,7 +150,14 @@ export default async function AccountPage() {
       {/* Messages */}
       {threads.length > 0 && (
         <section className="mt-8">
-          <h2 className="text-lg font-bold text-navy-900">Messages</h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-bold text-navy-900">Messages</h2>
+            {threads.some((t) => t.unread > 0) && (
+              <form action={markAllMessagesReadAction}>
+                <button className="text-sm font-medium text-navy-700 hover:underline">Mark all read</button>
+              </form>
+            )}
+          </div>
           <ul className="mt-3 divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200">
             {threads.map((t) => (
               <li key={`${t.kind}-${t.id}`}>

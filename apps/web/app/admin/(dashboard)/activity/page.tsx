@@ -1,11 +1,12 @@
 import Link from "next/link";
 import {
   getRecentActivity,
-  getActivitySeenAt,
+  getActivitySeenMap,
+  countNewActivityByType,
   ACTIVITY_TYPES,
   type ActivityType,
 } from "@/lib/activity";
-import { ActivitySeen } from "@/components/admin/activity-seen";
+import { clearActivityTypeAction, clearAllActivityAction } from "@/lib/admin-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Activity", robots: { index: false } };
@@ -35,30 +36,66 @@ export default async function ActivityPage({
   const valid = ACTIVITY_TYPES.map((t) => t.type) as string[];
   const only = sp.type && valid.includes(sp.type) ? (sp.type as ActivityType) : undefined;
 
-  const [events, seenAt] = await Promise.all([getRecentActivity(150, only), getActivitySeenAt()]);
+  const seenMap = await getActivitySeenMap();
+  const [events, counts] = await Promise.all([
+    getRecentActivity(150, only),
+    countNewActivityByType(seenMap),
+  ]);
   const now = Date.now();
-  const hadNew = events.some((e) => e.at > seenAt);
+  const totalNew = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
     <div>
-      <ActivitySeen hadNew={hadNew} />
-      <h1 className="mb-1 text-2xl font-black text-navy-900">Activity</h1>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-2xl font-black text-navy-900">Activity</h1>
+        {totalNew > 0 && (
+          <form action={clearAllActivityAction}>
+            <button className="rounded-md border border-slate-300 px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              Clear all
+            </button>
+          </form>
+        )}
+      </div>
       <p className="mb-5 max-w-2xl text-sm text-slate-500">
-        Recent across the site — logins, new accounts, teams, games, claims, scrimmage requests,
-        reports, and tournament-director requests. Newest first; a dot marks items since your last
-        visit.
+        Recent across the site. Notifications stay until you clear them — use a section&rsquo;s{" "}
+        <span className="font-medium">Clear</span> button to dismiss just that category. A dot marks
+        items newer than the last time you cleared that section.
       </p>
 
-      <div className="mb-5 flex flex-wrap gap-1.5">
-        <FilterChip label="All" href="/admin/activity" active={!only} />
-        {ACTIVITY_TYPES.map((t) => (
-          <FilterChip
-            key={t.type}
-            label={`${t.icon} ${t.label}`}
-            href={`/admin/activity?type=${t.type}`}
-            active={only === t.type}
-          />
-        ))}
+      {/* Per-section filters + clear buttons */}
+      <div className="mb-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <Link
+          href="/admin/activity"
+          className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+            !only ? "border-navy-400 bg-navy-50" : "border-slate-200 hover:bg-slate-50"
+          }`}
+        >
+          <span className="font-medium text-navy-900">All sections</span>
+          {totalNew > 0 && <CountBadge n={totalNew} />}
+        </Link>
+        {ACTIVITY_TYPES.map((t) => {
+          const n = counts[t.type];
+          return (
+            <div
+              key={t.type}
+              className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
+                only === t.type ? "border-navy-400 bg-navy-50" : "border-slate-200"
+              }`}
+            >
+              <Link href={`/admin/activity?type=${t.type}`} className="flex min-w-0 items-center gap-1.5 hover:underline">
+                <span aria-hidden>{t.icon}</span>
+                <span className="truncate text-navy-900">{t.label}</span>
+                {n > 0 && <CountBadge n={n} />}
+              </Link>
+              {n > 0 && (
+                <form action={clearActivityTypeAction}>
+                  <input type="hidden" name="type" value={t.type} />
+                  <button className="shrink-0 text-xs font-medium text-slate-500 hover:text-rose-600">Clear</button>
+                </form>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       {events.length === 0 ? (
@@ -66,7 +103,7 @@ export default async function ActivityPage({
       ) : (
         <ul className="card divide-y divide-slate-100">
           {events.map((e) => {
-            const isNew = e.at > seenAt;
+            const isNew = e.at > seenMap[e.type];
             const row = (
               <div className="flex items-start gap-3 px-4 py-3">
                 <span className="mt-0.5 text-lg leading-none" aria-hidden>
@@ -104,15 +141,10 @@ export default async function ActivityPage({
   );
 }
 
-function FilterChip({ label, href, active }: { label: string; href: string; active: boolean }) {
+function CountBadge({ n }: { n: number }) {
   return (
-    <Link
-      href={href}
-      className={`rounded-full px-3 py-1 text-xs font-medium ${
-        active ? "bg-navy-900 text-white" : "bg-slate-100 text-navy-800 hover:bg-slate-200"
-      }`}
-    >
-      {label}
-    </Link>
+    <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-600 px-1.5 py-0.5 text-xs font-bold text-white">
+      {n > 99 ? "99+" : n}
+    </span>
   );
 }

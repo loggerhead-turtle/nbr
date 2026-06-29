@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AGE_GROUPS, FIELD_GRADES, formatClock, type FieldGrade } from "@nbr/core";
+import { AGE_GROUPS, FIELD_GRADES, formatClock, sunsetMinutes, minutesToHM, mountainOffsetMinutes, type FieldGrade } from "@nbr/core";
 import { ageGroupLabel } from "@/lib/format";
 import { useTd } from "../lib/td-context";
 import { divisionLabel, SectionTitle, EmptyCard } from "../lib/ui";
 import { GAME_DURATIONS } from "../lib/types";
 import { enumerateDays, isoDate } from "../lib/util";
+import { zipToLatLng } from "../lib/zip-geo";
 
 const GRADE_TONE: Record<FieldGrade, string> = {
   Championship: "bg-violet-100 text-violet-700",
@@ -175,9 +176,17 @@ function SchedulePanel() {
     poolPlayGamesPerDay: t.poolPlayGamesPerDay,
     allowCrossover: t.allowCrossover,
     bracketDayIndex: t.bracketDayIndex,
+    zip: "84101",
   });
   const [busy, setBusy] = useState(false);
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
+
+  const autoSunset = () => {
+    const d = new Date(form.startDate);
+    if (Number.isNaN(d.getTime())) return;
+    const { lat, lng } = zipToLatLng(form.zip);
+    set("sunsetTime", minutesToHM(sunsetMinutes(lat, lng, d, mountainOffsetMinutes(d))));
+  };
 
   const days = useMemo(() => enumerateDays(form.startDate, form.endDate), [form.startDate, form.endDate]);
   const hasPools = t.divisions.some((d) => d.pools);
@@ -225,7 +234,11 @@ function SchedulePanel() {
             <input type="time" className="input" value={form.gamesEndBy} onChange={(e) => set("gamesEndBy", e.target.value)} />
           </Field>
           <Field label="Sunset (no-light fields finish by)">
-            <input type="time" className="input" value={form.sunsetTime} onChange={(e) => set("sunsetTime", e.target.value)} />
+            <div className="flex gap-1">
+              <input type="time" className="input" value={form.sunsetTime} onChange={(e) => set("sunsetTime", e.target.value)} />
+              <input className="input w-20" value={form.zip} onChange={(e) => set("zip", e.target.value)} inputMode="numeric" placeholder="zip" aria-label="Zip code for sunset" />
+              <button type="button" onClick={autoSunset} className="btn-ghost shrink-0" title="Calculate sunset for this date + zip">Auto</button>
+            </div>
           </Field>
           <Field label="Game time limit">
             <select className="input" value={form.gameDurationMinutes} onChange={(e) => set("gameDurationMinutes", Number(e.target.value))}>
@@ -277,7 +290,9 @@ function SchedulePanel() {
       {t.schedule.length === 0 ? (
         <EmptyCard icon="🗓️" title="No games scheduled yet" sub="Set the options above and generate — teams auto-assign to fields by grade and time." />
       ) : (
-        days.map((date, dayIndex) => {
+        <>
+        <FieldReassign />
+        {days.map((date, dayIndex) => {
           const dayGames = t.schedule
             .filter((g) => g.dayIndex === dayIndex)
             .sort((a, b) => (a.startMinutes ?? 0) - (b.startMinutes ?? 0));
@@ -306,10 +321,20 @@ function SchedulePanel() {
                       <tr key={g.id} className="hover:bg-slate-50">
                         <td className="px-4 py-2 tabular-nums text-slate-600">{g.startMinutes != null ? formatClock(g.startMinutes) : "—"}</td>
                         <td className="px-4 py-2">
-                          <span className="flex items-center gap-1.5">
-                            {g.fieldGrade && <GradeBadge grade={g.fieldGrade} />}
-                            <span className="text-slate-600">{g.fieldName ?? "—"}</span>
-                          </span>
+                          <select
+                            className="rounded border border-slate-200 px-1.5 py-1 text-xs"
+                            value={g.fieldId ?? ""}
+                            onChange={(e) => act((p) => p.setGameField(t.id, g.id, e.target.value || null))}
+                          >
+                            <option value="">— unassigned —</option>
+                            {[...t.fields]
+                              .sort((a, b) => FIELD_GRADES.indexOf(a.grade) - FIELD_GRADES.indexOf(b.grade))
+                              .map((f) => (
+                                <option key={f.id} value={f.id}>
+                                  [{f.grade === "Championship" ? "Champ" : f.grade}] {f.name}
+                                </option>
+                              ))}
+                          </select>
                         </td>
                         <td className="px-4 py-2">
                           {g.kind === "bracket" ? (
@@ -343,8 +368,60 @@ function SchedulePanel() {
               </table>
             </div>
           );
-        })
+        })}
+        </>
       )}
+    </div>
+  );
+}
+
+function FieldReassign() {
+  const { selected, act } = useTd();
+  const t = selected!;
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const g of t.schedule) if (g.fieldId) m.set(g.fieldId, (m.get(g.fieldId) ?? 0) + 1);
+    return m;
+  }, [t.schedule]);
+  if (t.fields.length < 2) return null;
+  const usedFields = t.fields.filter((f) => (counts.get(f.id) ?? 0) > 0);
+  const moveCount = from ? counts.get(from) ?? 0 : 0;
+  return (
+    <div className="card p-4">
+      <SectionTitle title="Move games between fields" sub="Reassign a whole field's games at once (e.g. a field goes down mid-event). For a partial move, change individual games' fields in the tables below." />
+      <div className="flex flex-wrap items-end gap-2">
+        <div>
+          <label className="label text-[11px]">From field</label>
+          <select className="input" value={from} onChange={(e) => setFrom(e.target.value)}>
+            <option value="">Choose…</option>
+            {usedFields.map((f) => (
+              <option key={f.id} value={f.id}>{f.name} ({counts.get(f.id)} games)</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label text-[11px]">To field</label>
+          <select className="input" value={to} onChange={(e) => setTo(e.target.value)}>
+            <option value="">Choose…</option>
+            {t.fields.filter((f) => f.id !== from).map((f) => (
+              <option key={f.id} value={f.id}>[{f.grade === "Championship" ? "Champ" : f.grade}] {f.name}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          disabled={!from || !to}
+          onClick={async () => {
+            await act((p) => p.reassignFieldGames(t.id, from, to));
+            setFrom("");
+            setTo("");
+          }}
+          className="btn-primary disabled:opacity-50"
+        >
+          Move all {moveCount} game{moveCount === 1 ? "" : "s"} →
+        </button>
+      </div>
     </div>
   );
 }

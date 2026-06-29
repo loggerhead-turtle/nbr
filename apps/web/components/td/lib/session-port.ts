@@ -8,9 +8,11 @@
 
 import {
   generatePools,
+  summarizePools,
   buildTournamentSchedule,
   buildBracket as coreBuildBracket,
   type PoolTeam,
+  type SeededTeam,
   type GradedField,
   type ScheduleDivisionInput,
   type BracketGameInput,
@@ -37,6 +39,14 @@ import type {
 } from "./types";
 import { uid, nowIso, parseHM, enumerateDays } from "./util";
 import { buildDemoStore, type DemoStore } from "./demo-seed";
+
+/** Point a scheduled game at a different field (updates name + grade). */
+function applyFieldToGame(t: TdTournament, g: TdTournament["schedule"][number], fieldId: string | null): void {
+  const f = fieldId ? t.fields.find((x) => x.id === fieldId) : null;
+  g.fieldId = f?.id ?? null;
+  g.fieldName = f?.name ?? null;
+  g.fieldGrade = f?.grade ?? null;
+}
 
 /** Flatten a generated bracket into placeable games (round-0 byes omitted). */
 function flattenBracket(bracket: BracketResult): BracketGameInput[] {
@@ -274,6 +284,15 @@ export class SessionTdPort implements TdDataPort {
     this.persist();
   }
 
+  async setDivisionPools(tournamentId: string, divisionId: string, teamsByPool: SeededTeam[][]): Promise<void> {
+    const t = this.tournament(tournamentId);
+    const div = t.divisions.find((d) => d.id === divisionId);
+    if (!div) return;
+    div.pools = summarizePools(teamsByPool);
+    div.bracket = null; // arrangement changed — invalidate any prior bracket
+    this.persist();
+  }
+
   // ── Fields + scheduling ─────────────────────────────────────────────────────
   async addField(tournamentId: string, input: AddFieldInput): Promise<void> {
     const t = this.tournament(tournamentId);
@@ -376,6 +395,21 @@ export class SessionTdPort implements TdDataPort {
   async clearSchedule(tournamentId: string): Promise<void> {
     const t = this.tournament(tournamentId);
     t.schedule = [];
+    this.persist();
+  }
+
+  async setGameField(tournamentId: string, gameId: string, fieldId: string | null): Promise<void> {
+    const t = this.tournament(tournamentId);
+    const g = t.schedule.find((x) => x.id === gameId);
+    if (g) applyFieldToGame(t, g, fieldId);
+    this.persist();
+  }
+
+  async reassignFieldGames(tournamentId: string, fromFieldId: string, toFieldId: string): Promise<void> {
+    const t = this.tournament(tournamentId);
+    for (const g of t.schedule) {
+      if (g.fieldId === fromFieldId) applyFieldToGame(t, g, toFieldId);
+    }
     this.persist();
   }
 

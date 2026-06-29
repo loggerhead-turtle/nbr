@@ -73,6 +73,39 @@ export async function markThreadReadAction(formData: FormData): Promise<void> {
   revalidatePath("/account");
 }
 
+/** Mark every thread the viewer participates in as read — a one-click clear. */
+export async function markAllMessagesReadAction(): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) return;
+  const now = new Date();
+  const teamIds = (
+    await prisma.claim.findMany({
+      where: { userId: user.id, status: "APPROVED" },
+      select: { teamId: true },
+    })
+  ).map((c) => c.teamId);
+
+  await prisma.tournamentInvite.updateMany({
+    where: { tournament: { directorUserId: user.id } },
+    data: { directorReadAt: now },
+  });
+  await prisma.scrimmageRequest.updateMany({
+    where: { fromUserId: user.id },
+    data: { fromReadAt: now },
+  });
+  if (teamIds.length > 0) {
+    await prisma.tournamentInvite.updateMany({
+      where: { teamId: { in: teamIds } },
+      data: { teamReadAt: now },
+    });
+    await prisma.scrimmageRequest.updateMany({
+      where: { toTeamId: { in: teamIds } },
+      data: { toReadAt: now },
+    });
+  }
+  revalidatePath("/account");
+}
+
 /** Mark read helper, also callable from the thread page on view. */
 export async function markRead(kind: Kind, id: string, userId: string): Promise<void> {
   if (kind === "scrimmage") {
