@@ -71,18 +71,14 @@ maximize  Σ_g w_g · logloss(y_g, σ(z_g))
   pooling within an age). For a season-carried team `t_i = μ_i − β_{age(i)}`, so
   the **total** θ is pulled to the predecessor rating, preserving the existing
   carry-over behaviour.
-- `s` (`ageStepPrior`) is the expected per-year developmental gain (θ units). The
-  step prior simultaneously **smooths** the curve, encodes the **expected
-  increase**, and **fills ages with no bridges** (their step defaults to `s`). It
-  is driven by the admin **points-per-age-year** setting (`ageOffsetStep`,
-  default **200 pts/year**); the real 8U→16U gap is large, so the prior is strong
-  enough to dominate the within-age spread (a weak prior leaves a dominant 9U
-  outranking an average 14U). `ageCurveLambda` is high so sparse, positively-
-  selected bridge games can't compress the curve away from the prior.
-- After each sweep the curve is projected to be **non-decreasing**
-  (`enforceMonotone`) — see selection bias below.
-- For display the whole curve is uniformly shifted so **14U ≈ 1500** (younger
-  below, older above) — a pure relabel that changes no prediction or ranking.
+- `s` (`ageStepPrior`) is the per-year developmental step (θ units), driven by the
+  admin **points-per-age-year** setting (`ageOffsetStep`, default **200
+  pts/year**). With the default **fixed** curve this is exactly the gap between
+  adjacent ages — `β_age = s × (age − 14)`, centered so **14U ≈ 1500** (younger
+  below, older above).
+- The `fitAgeCurve: true` mode instead *learns* the curve, adding the step prior
+  (smoothness + expected increase), `ageCurveLambda`, and a non-decreasing
+  projection (`enforceMonotone`). Not the default — see selection bias below.
 
 Solved with the same damped coordinate-Newton sweeps as `bt-mov-v1`; β is fit in
 the loop exactly like the per-level home advantage already is. When no age map is
@@ -96,22 +92,23 @@ A team's `rd` is widened to include the baseline's uncertainty:
 bridge games) therefore get an **honestly wider RD** and are more likely flagged
 provisional, so the UI can caveat thin cross-age comparisons.
 
-## The statistical trap: selection bias
+## The statistical trap: selection bias (why the curve is FIXED by default)
 
 Bridge games are **not random**. A young team plays up usually *because it is
-strong*. Naive estimation on bridge games therefore **understates** the true age
-gap, and an extreme upset could even invert the curve (a strong 8U above a weak
-16U). Three mitigations are built in:
+strong*. So estimating the curve from bridge games **systematically understates**
+the gap — and with many bridges the (biased) data overwhelms any soft prior and
+collapses the well-connected middle ages into a flat plateau (observed in
+production: U12 = U13 = U14 = 1500 despite hundreds of bridge games). The model
+was faithfully learning from biased data, and the biased data is wrong.
 
-1. **Monotone projection** — the curve can never decrease with age.
-2. **Step prior anchored to a plausible developmental gain** `s` — so the curve is
-   sensible even where bridges are sparse or biased.
-3. **Held-out cross-age validation** — we only accept the model if it actually
-   predicts unseen cross-age games better (below).
-
-If validation later shows the gap is still mis-estimated, the next step is an
-explicit selection model for who-plays-up; we deliberately start with the simpler,
-testable design.
+**Resolution:** by default the age curve is **not learned** — it is the fixed
+developmental curve `β_age = step × (age − 14)` (the `fitAgeCurve: false` default).
+This is robust to the play-up bias by construction: older brackets always sit a
+full `step` above younger ones, and Bradley-Terry only decides each team's
+standing *around* its age baseline (`δ`). Cross-age games still inform `δ`, so a
+young team that genuinely beats older teams climbs — but off a floor it cannot
+trivially escape. `fitAgeCurve: true` re-enables the learned curve (with the
+monotone projection and step prior) for datasets without the selection problem.
 
 ## Validation protocol
 

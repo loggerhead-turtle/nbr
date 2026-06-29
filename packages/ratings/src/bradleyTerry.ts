@@ -59,6 +59,15 @@ export interface BradleyTerryOptions {
   ageAnchorLambda?: number;
   /** Project the age curve to be non-decreasing each sweep (blocks inversions). */
   enforceMonotone?: boolean;
+  /**
+   * Learn the age curve from cross-age games (true) vs. impose a fixed
+   * developmental curve `step × (age − 14)` (false, the default). Real bridge
+   * games are positively selected — only strong young teams play up — so learning
+   * the curve systematically understates the gap and collapses the middle ages.
+   * A fixed curve is robust to that bias; Bradley-Terry still sets each team's
+   * standing around its age baseline.
+   */
+  fitAgeCurve?: boolean;
   maxIterations?: number;
   tolerance?: number;
   provisionalRdThreshold?: number;
@@ -80,6 +89,8 @@ const DEFAULTS = {
   ageCurveLambda: 5.0,
   ageAnchorLambda: 0.5,
   enforceMonotone: true,
+  // Fixed developmental curve by default — robust to selection-biased bridges.
+  fitAgeCurve: false,
   maxIterations: 200,
   tolerance: 1e-6,
   provisionalRdThreshold: 110,
@@ -155,6 +166,7 @@ export function computeRatingsBT(
     ageCurveLambda: options.ageCurveLambda ?? DEFAULTS.ageCurveLambda,
     ageAnchorLambda: options.ageAnchorLambda ?? DEFAULTS.ageAnchorLambda,
     enforceMonotone: options.enforceMonotone ?? DEFAULTS.enforceMonotone,
+    fitAgeCurve: options.fitAgeCurve ?? DEFAULTS.fitAgeCurve,
     maxIterations: options.maxIterations ?? DEFAULTS.maxIterations,
     tolerance: options.tolerance ?? DEFAULTS.tolerance,
     provisionalRdThreshold: options.provisionalRdThreshold ?? DEFAULTS.provisionalRdThreshold,
@@ -219,8 +231,10 @@ export function computeRatingsBT(
   const beta = new Map<string, number>();
   const bridgeCount = new Map<string, number>();
   for (const a of presentAges) {
-    // Warm-start the curve on the prior step so isolated ages start sensibly.
-    beta.set(a, opt.ageStepPrior * (ageYear(a)! - ageYear(presentAges[0]!)!));
+    // The developmental curve, centered at 14U (= BASE). When fitting it is a
+    // warm-start; when fixed (the default) it stays exactly this — `step` points
+    // per age-year, robust to selection-biased bridge games.
+    beta.set(a, opt.ageStepPrior * (ageYear(a)! - AGE_ANCHOR_YEAR));
     bridgeCount.set(a, 0);
   }
   if (ageMode) {
@@ -322,7 +336,7 @@ export function computeRatingsBT(
         home[lvl] = Math.max(-1, Math.min(1, home[lvl] + step));
       }
     }
-    if (ageMode) {
+    if (ageMode && opt.fitAgeCurve) {
       // Add the curve prior: anchor the youngest age near BASE, and pull each
       // adjacent step toward the expected per-year development. This both
       // smooths the curve and fills ages that have few/no bridge games.
@@ -356,10 +370,10 @@ export function computeRatingsBT(
     if (maxStep < opt.tolerance) break;
   }
 
-  // Re-center the curve for display so 14U sits at the BASE (~1500): younger ages
-  // fall below it, older ages above. This is a uniform shift of every baseline —
-  // it changes no win probability or ranking, only where the familiar 1500 lands.
-  if (ageMode && presentAges.length > 0) {
+  // Re-center a *fitted* curve for display so 14U sits at the BASE (~1500):
+  // younger ages fall below it, older above. A uniform shift of every baseline —
+  // it changes no win probability or ranking. (A fixed curve is already centered.)
+  if (ageMode && opt.fitAgeCurve && presentAges.length > 0) {
     const ref = presentAges.reduce((best, a) =>
       Math.abs(ageYear(a)! - AGE_ANCHOR_YEAR) < Math.abs(ageYear(best)! - AGE_ANCHOR_YEAR) ? a : best,
     );
@@ -401,7 +415,8 @@ export function computeRatingsBT(
     const rec = record.get(id)!;
     const ageKey = ageMode ? teamAge.get(id) : undefined;
     const varDelta = 1 / infoDiag.get(id)!;
-    const varBeta = ageKey ? 1 / betaInfo.get(ageKey)! : 0;
+    // A fixed curve is imposed, not estimated, so it adds no baseline uncertainty.
+    const varBeta = ageKey && opt.fitAgeCurve ? 1 / betaInfo.get(ageKey)! : 0;
     const rd = SCALE * Math.sqrt(varDelta + varBeta);
     const isProvisional = rec.gp < opt.provisionalMinGames || rd > opt.provisionalRdThreshold;
     const rating = BASE + SCALE * thetaOf(id);
