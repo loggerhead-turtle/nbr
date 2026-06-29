@@ -40,9 +40,12 @@ export async function runRecompute(): Promise<void> {
   console.log(`[recompute] started run ${run.id} (algorithm=${algorithm})`);
 
   try {
-    // Only rate VERIFIED games: both teams must be real (non-ghost). Ghost teams
-    // are auto-created, unconfirmed opponents, so their games aren't trustworthy
-    // and must not influence ratings.
+    // Count every game a REAL team played — including games against an untracked
+    // (ghost) opponent, which are still that team's real results. Only games
+    // between TWO ghosts are dropped (pure noise: neither side is tracked). Ghost
+    // teams are rated internally to anchor their opponents but are hidden from the
+    // public rankings (getRatings filters isGhost) and their rating rows are
+    // purged below, so they never appear ranked.
     const baseWhere = {
       status: "FINAL" as const,
       homeScore: { not: null },
@@ -51,8 +54,7 @@ export async function runRecompute(): Promise<void> {
     const games = await prisma.game.findMany({
       where: {
         ...baseWhere,
-        homeTeam: { isGhost: false },
-        awayTeam: { isGhost: false },
+        OR: [{ homeTeam: { isGhost: false } }, { awayTeam: { isGhost: false } }],
       },
       select: {
         homeTeamId: true,
@@ -66,8 +68,8 @@ export async function runRecompute(): Promise<void> {
     });
     const totalFinal = await prisma.game.count({ where: baseWhere });
     console.log(
-      `[recompute] using ${games.length} verified games ` +
-        `(excluded ${totalFinal - games.length} involving ghost teams)`,
+      `[recompute] using ${games.length} games ` +
+        `(excluded ${totalFinal - games.length} between two ghost teams)`,
     );
 
     const engineGames: EngineGame[] = games.map((g) => ({
@@ -199,10 +201,10 @@ export async function runRecompute(): Promise<void> {
       teamsAffected += 1;
     }
 
-    // Ghost teams aren't rated (their games are excluded), so drop any stale
-    // Rating rows they carried from older runs — they must not appear ranked.
+    // Ghosts are rated only to anchor their real opponents — they must never be
+    // ranked or shown as rated, so drop their Rating rows after the solve.
     const purged = await prisma.rating.deleteMany({ where: { team: { isGhost: true } } });
-    if (purged.count > 0) console.log(`[recompute] purged ${purged.count} stale ghost ratings`);
+    if (purged.count > 0) console.log(`[recompute] purged ${purged.count} ghost ratings (anchor-only)`);
 
     // Mark all processed games as rated (audit; recompute remains full each run).
     await prisma.game.updateMany({

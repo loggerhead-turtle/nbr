@@ -152,9 +152,11 @@ All of this reuses the existing backtest harness
   non-age-normalized model is active.
 - No schema change is required: the setting reuses the existing `AppSetting`
   table, and ratings stay in `Rating.rating` on the same display scale.
-- **Verified games only:** the recompute excludes any game involving a **ghost**
-  team (auto-created, unconfirmed opponents) — only real-vs-real games rate.
-  The run logs how many games were excluded.
+- **Ghost handling:** every game a real team played counts toward its record and
+  rating, including games vs untracked (ghost) opponents — only games between
+  *two* ghosts are dropped. Ghosts are rated solely to anchor their opponents,
+  then their rating rows are purged and they're filtered from public rankings, so
+  they never appear ranked.
 
 ## References
 
