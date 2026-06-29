@@ -6,11 +6,22 @@
  * `bt-age-v1` active the step is already baked into stored ratings, so this
  * preview's offset is only meaningful for the non-age-normalized models.
  */
-import { AGE_OFFSET_KEY, DEFAULT_AGE_STEP, AGE_ANCHOR_YEAR, clampAgeStep } from "@nbr/core";
+import {
+  AGE_OFFSET_KEY,
+  AGE_OFFSET_STEP_OLDER_KEY,
+  DEFAULT_AGE_STEP,
+  DEFAULT_AGE_STEP_OLDER,
+  ageBaselinePoints,
+  clampAgeStep,
+} from "@nbr/core";
 
-export { AGE_OFFSET_KEY, DEFAULT_AGE_STEP, clampAgeStep };
-
-const ANCHOR_AGE = AGE_ANCHOR_YEAR;
+export {
+  AGE_OFFSET_KEY,
+  AGE_OFFSET_STEP_OLDER_KEY,
+  DEFAULT_AGE_STEP,
+  DEFAULT_AGE_STEP_OLDER,
+  clampAgeStep,
+};
 
 /** Parse an age group like "14U" (or "U14") to its number; null if not an age group. */
 export function ageYears(ageGroup: string | null | undefined): number | null {
@@ -19,12 +30,16 @@ export function ageYears(ageGroup: string | null | undefined): number | null {
   return m ? Number(m[1]) : null;
 }
 
-/** Points to add to a team's raw rating for a cross-age view (14U = 0). */
+/**
+ * Points to add to a team's raw rating for a cross-age view (14U = 0), with the
+ * reduced step applied to older ages — matches the `bt-age-v1` curve.
+ */
 export function ageOffsetPoints(
   ageGroup: string | null | undefined,
   stepPoints: number = DEFAULT_AGE_STEP,
+  olderStep: number = DEFAULT_AGE_STEP_OLDER,
 ): number {
   const y = ageYears(ageGroup);
   if (y == null) return 0;
-  return (y - ANCHOR_AGE) * stepPoints;
+  return ageBaselinePoints(y, stepPoints, olderStep);
 }

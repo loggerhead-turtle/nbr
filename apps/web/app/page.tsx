@@ -7,7 +7,9 @@ import { RatingsTable } from "@/components/ratings-table";
 import { getLiveSearchEnabled } from "@/lib/site-settings";
 import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
-export const revalidate = 3600; // ISR: static-fast, refreshed hourly
+// Rendered per request so sort/division/page query params always take effect
+// (ISR was serving a cached order regardless of ?sort).
+export const dynamic = "force-dynamic";
 
 // Must be a valid AGE_GROUPS value ("U12"), not the display label ("12U") —
 // otherwise it matches no option (the filter falls back to the first, 8U) and
@@ -38,9 +40,10 @@ function resolveDivision(sp: Record<string, string | undefined>): {
 
 const SORT_LABELS: Record<string, string> = {
   games: "games played",
-  rating: "rating (high to low)",
-  name: "team name (A–Z)",
+  rating: "rating",
+  name: "team name",
 };
+const DIR_LABEL: Record<string, string> = { asc: "low to high", desc: "high to low" };
 
 export default async function HomePage({
   searchParams,
@@ -55,7 +58,9 @@ export default async function HomePage({
   const ageGroup = division.kind === "age" ? division.value : undefined;
   const classification = division.kind === "class" ? division.value : undefined;
   const includeProvisional = sp.prov === "1";
-  const sort = (sp.sort as "rating" | "name" | "games") || "games";
+  // Default: rank by NBR, high to low.
+  const sort = (sp.sort as "rating" | "name" | "games") || "rating";
+  const dir: "asc" | "desc" = sp.dir === "asc" ? "asc" : sp.dir === "desc" ? "desc" : sort === "name" ? "asc" : "desc";
   const page = Number(sp.page) || 1;
   const liveSearch = await getLiveSearchEnabled();
 
@@ -65,6 +70,7 @@ export default async function HomePage({
     classification,
     includeProvisional,
     sort,
+    dir,
     page,
     pageSize: 50,
   });
@@ -92,10 +98,10 @@ export default async function HomePage({
           {classification ? `Varsity ${classification}` : ageGroupLabel(ageGroup)}
           {search ? ` · matching “${search}”` : ""}
           {" · "}
-          <span className="text-slate-400">Sorted by {SORT_LABELS[sort]}</span>
+          <span className="text-slate-400">Sorted by {SORT_LABELS[sort]} ({DIR_LABEL[dir]})</span>
         </p>
 
-        {rows.length === 0 ? <EmptyState /> : <RatingsTable rows={rows} sort={sort} sp={sp} />}
+        {rows.length === 0 ? <EmptyState /> : <RatingsTable rows={rows} sort={sort} dir={dir} sp={sp} />}
 
         <Pagination page={page} total={total} pageSize={50} sp={sp} />
       </section>

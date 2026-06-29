@@ -25,6 +25,7 @@ export interface RatingsQuery {
   classification?: string;
   includeProvisional?: boolean;
   sort?: "rating" | "name" | "games";
+  dir?: "asc" | "desc";
   page?: number;
   pageSize?: number;
 }
@@ -38,6 +39,8 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
 
   const where: Prisma.TeamWhereInput = {
     isActive: true,
+    // Ghost teams are unverified auto-created opponents — never show them publicly.
+    isGhost: false,
     rating: { isNot: null },
     // Public side requires a classification: a youth age group OR a varsity class.
     // Unclassified teams are admin-only.
@@ -58,12 +61,15 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
     where.rating = { is: { isProvisional: false } };
   }
 
+  // Sort direction: explicit `dir`, else a sensible default per column
+  // (names A→Z, numbers high→low).
+  const dir: "asc" | "desc" = q.dir ?? (q.sort === "name" ? "asc" : "desc");
   const orderBy: Prisma.TeamOrderByWithRelationInput =
     q.sort === "name"
-      ? { name: "asc" }
+      ? { name: dir }
       : q.sort === "games"
-        ? { rating: { gamesPlayed: "desc" } }
-        : { rating: { rating: "desc" } };
+        ? { rating: { gamesPlayed: dir } }
+        : { rating: { rating: dir } };
 
   try {
     const [teams, total] = await Promise.all([

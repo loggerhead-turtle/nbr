@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { prisma } from "@nbr/db";
-import { ageOffsetPoints, AGE_OFFSET_KEY, clampAgeStep, DEFAULT_AGE_STEP } from "@/lib/age-offset";
+import {
+  ageOffsetPoints,
+  AGE_OFFSET_KEY,
+  AGE_OFFSET_STEP_OLDER_KEY,
+  clampAgeStep,
+  DEFAULT_AGE_STEP,
+  DEFAULT_AGE_STEP_OLDER,
+} from "@/lib/age-offset";
 import { setAgeOffsetStepAction } from "@/lib/admin-actions";
 import { formatRating, ageGroupLabel } from "@/lib/format";
 
@@ -21,8 +28,12 @@ export default async function AgeOffsetPage({
 }) {
   const sp = await searchParams;
   const includeProvisional = sp.prov === "1";
-  const saved = await prisma.appSetting.findUnique({ where: { key: AGE_OFFSET_KEY } });
+  const [saved, savedOlder] = await Promise.all([
+    prisma.appSetting.findUnique({ where: { key: AGE_OFFSET_KEY } }),
+    prisma.appSetting.findUnique({ where: { key: AGE_OFFSET_STEP_OLDER_KEY } }),
+  ]);
   const step = saved ? clampAgeStep(saved.value) : DEFAULT_AGE_STEP;
+  const stepOlder = savedOlder ? clampAgeStep(savedOlder.value) : DEFAULT_AGE_STEP_OLDER;
 
   const teams = await prisma.team.findMany({
     where: {
@@ -38,7 +49,7 @@ export default async function AgeOffsetPage({
   const rows = teams
     .filter((t) => t.rating)
     .map((t) => {
-      const offset = ageOffsetPoints(t.ageGroup, step);
+      const offset = ageOffsetPoints(t.ageGroup, step, stepOlder);
       return {
         id: t.id,
         slug: t.slug,
@@ -70,6 +81,16 @@ export default async function AgeOffsetPage({
               id="step"
               name="step"
               defaultValue={String(step)}
+              className="input w-32"
+              inputMode="numeric"
+            />
+          </div>
+          <div>
+            <label className="label" htmlFor="stepOlder">Points per year (16U+)</label>
+            <input
+              id="stepOlder"
+              name="stepOlder"
+              defaultValue={String(stepOlder)}
               className="input w-32"
               inputMode="numeric"
             />
