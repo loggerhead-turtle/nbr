@@ -43,16 +43,19 @@ interface DbGame {
 export async function runReconcile(arg?: string): Promise<void> {
   const apply = envBool("RECONCILE_APPLY", false);
   const maxTeams = envNum("RECONCILE_MAX_TEAMS", 0); // 0 = no cap
+  // A single team can be targeted by CLI arg or, for Render crons (which can't
+  // pass argv), the RECONCILE_TEAM env var.
+  const single = arg ?? (process.env.RECONCILE_TEAM?.trim() || undefined);
 
-  const where = arg
-    ? { OR: [{ id: arg }, { gcTeamId: arg }] }
+  const where = single
+    ? { OR: [{ id: single }, { gcTeamId: single }] }
     : { gcTeamId: { not: null }, isGhost: false, scrapeEnabled: true };
   let teams = await prisma.team.findMany({
     where,
     select: { id: true, name: true, gcTeamId: true },
     orderBy: { name: "asc" },
   });
-  if (!arg && maxTeams > 0) teams = teams.slice(0, maxTeams);
+  if (!single && maxTeams > 0) teams = teams.slice(0, maxTeams);
 
   console.log(
     `[reconcile] ${teams.length} team(s); mode=${
@@ -202,7 +205,7 @@ export async function runReconcile(arg?: string): Promise<void> {
       }
 
       // Polite delay between teams when scanning the whole DB.
-      if (!arg && t !== teams[teams.length - 1]) {
+      if (!single && t !== teams[teams.length - 1]) {
         await jitterDelay(envNum("SCRAPER_MIN_DELAY_SEC", 30), envNum("SCRAPER_MAX_DELAY_SEC", 120));
       }
     }
