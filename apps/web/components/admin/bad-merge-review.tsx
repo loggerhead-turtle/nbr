@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { repairBadMergesAction } from "@/lib/admin-actions";
+import { NbrLink } from "./team-links";
 
 export interface OutlierVM {
   gameId: string;
@@ -15,6 +16,7 @@ export interface OutlierVM {
 export interface FindingVM {
   teamId: string;
   teamName: string;
+  teamSlug: string;
   teamAge: number;
   gcTeamId: string | null;
   ownCohortGames: number;
@@ -95,8 +97,9 @@ export function BadMergeReview({ findings, gap }: { findings: FindingVM[]; gap: 
             return (
               <div key={f.teamId} className={`card overflow-hidden ${isBusy ? "opacity-50" : ""}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2 bg-navy-900 px-4 py-2 text-sm text-white">
-                  <span className="flex items-center gap-2 font-semibold">
+                  <span className="flex flex-wrap items-center gap-2 font-semibold">
                     {f.teamName} <span className="text-white/60">(U{f.teamAge})</span>
+                    <NbrLink slug={f.teamSlug} />
                     {f.gcTeamId && (
                       <a
                         href={gcUrl(f.gcTeamId)}

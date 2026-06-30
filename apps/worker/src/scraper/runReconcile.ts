@@ -132,7 +132,7 @@ export async function runReconcile(arg?: string): Promise<void> {
     : { gcTeamId: { not: null }, isGhost: false, scrapeEnabled: true };
   let teams = await prisma.team.findMany({
     where,
-    select: { id: true, name: true, gcTeamId: true, ageGroup: true },
+    select: { id: true, name: true, slug: true, gcTeamId: true, ageGroup: true },
     orderBy: { name: "asc" },
   });
   if (!single && maxTeams > 0) teams = teams.slice(0, maxTeams);
@@ -173,6 +173,7 @@ export async function runReconcile(arg?: string): Promise<void> {
       const finding: ReconcileTeamFinding = {
         teamId: t.id,
         name: t.name,
+        slug: t.slug,
         gcTeamId: t.gcTeamId,
         ageGroup: t.ageGroup ?? null,
         dbCount,

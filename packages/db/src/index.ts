@@ -32,6 +32,8 @@ export {
   deleteExactNameGhosts,
   countOrphanGhosts,
   deleteOrphanGhosts,
+  getGhostSplitGroups,
+  reassignTeamGames,
 } from "./teams";
 export type {
   BadMergeFinding,
@@ -41,4 +43,6 @@ export type {
   GhostMergeSuggestion,
   ExactGhostMatch,
   SharedGameRow,
+  GhostSplitGame,
+  GhostSplitGroup,
 } from "./teams";

@@ -11,6 +11,9 @@ import {
   repairCrossAgeMerge,
   deleteExactNameGhosts,
   deleteOrphanGhosts,
+  getGhostSplitGroups,
+  reassignTeamGames,
+  type GhostSplitGroup,
 } from "@nbr/db";
 import {
   createTeamSchema,
@@ -537,6 +540,29 @@ export async function deleteOrphanGhostsAction(): Promise<void> {
   revalidatePath("/admin/ghosts");
   revalidatePath("/admin/audit");
   revalidatePath("/admin/teams");
+}
+
+/** Group a junk-drawer ghost's games by opponent age (for the split UI). */
+export async function getGhostSplitGroupsAction(ghostId: string): Promise<GhostSplitGroup[]> {
+  await requireAdmin();
+  if (!ghostId) return [];
+  return getGhostSplitGroups(ghostId);
+}
+
+/** Move a set of a ghost's games onto a chosen team (one age-group at a time). */
+export async function reassignGhostGamesAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const ghostId = String(formData.get("ghostId") ?? "");
+  const targetId = String(formData.get("targetId") ?? "");
+  const gameIds = String(formData.get("gameIds") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (!ghostId || !targetId || gameIds.length === 0) return;
+  await reassignTeamGames(ghostId, gameIds, targetId);
+  revalidatePath("/admin/ghosts");
+  revalidatePath("/admin/duplicates");
+  revalidatePath("/");
 }
 
 /** Search real (non-ghost) teams to hand-pick a merge target for a ghost. */

@@ -1,9 +1,17 @@
 "use client";
 
 import { useState, useTransition, type FormEvent } from "react";
-import { mergeGhostAction, searchMergeTargets } from "@/lib/admin-actions";
+import { useRouter } from "next/navigation";
+import {
+  mergeGhostAction,
+  searchMergeTargets,
+  getGhostSplitGroupsAction,
+  reassignGhostGamesAction,
+  deletePhantomGamesAction,
+} from "@/lib/admin-actions";
+import { NbrLink, GcLink } from "./team-links";
 import type { MergeTargetOption } from "@/lib/merge-types";
-import type { GhostTeamWithSuggestions, GhostMergeSuggestion } from "@nbr/db";
+import type { GhostTeamWithSuggestions, GhostMergeSuggestion, GhostSplitGroup } from "@nbr/db";
 import type { MergeTier } from "@nbr/core";
 
 const TIER_STYLE: Record<MergeTier, { bar: string; chip: string; label: string }> = {
@@ -12,8 +20,6 @@ const TIER_STYLE: Record<MergeTier, { bar: string; chip: string; label: string }
   low: { bar: "bg-rose-500", chip: "bg-rose-100 text-rose-800", label: "Low" },
   none: { bar: "bg-slate-400", chip: "bg-slate-200 text-slate-700", label: "No match" },
 };
-
-const gcUrl = (id: string) => `https://web.gc.com/teams/${id}/schedule`;
 
 export function GhostReview({
   withMatch,
@@ -103,7 +109,10 @@ function GhostCard({
   return (
     <div className={`card overflow-hidden ${pending ? "opacity-50" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 bg-navy-900 px-4 py-2 text-sm text-white">
-        <span className="font-semibold">{ghost.name}</span>
+        <span className="flex flex-wrap items-center gap-2 font-semibold">
+          {ghost.name}
+          <NbrLink slug={ghost.slug} />
+        </span>
         <span className="flex items-center gap-2 text-xs">
           <span className="rounded-full bg-white/15 px-2 py-0.5">
             {ghost.ageGroup ?? "no age"}
@@ -126,6 +135,10 @@ function GhostCard({
             No same-name real team found. Search below to pick a target.
           </p>
         )}
+      </div>
+
+      <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+        <GhostSplit ghost={ghost} />
       </div>
 
       <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
@@ -182,6 +195,167 @@ function GhostCard({
   );
 }
 
+/**
+ * Split a junk-drawer ghost: group its games by opponent age and send each group
+ * to the right team (or delete it). The admin confirms each group's destination,
+ * so a legit play-up isn't auto-misrouted.
+ */
+function GhostSplit({ ghost }: { ghost: GhostTeamWithSuggestions }) {
+  const router = useRouter();
+  const [groups, setGroups] = useState<GhostSplitGroup[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      setGroups(await getGhostSplitGroupsAction(ghost.id));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const move = (gameIds: string[], targetId: string) => {
+    const fd = new FormData();
+    fd.set("ghostId", ghost.id);
+    fd.set("targetId", targetId);
+    fd.set("gameIds", gameIds.join(","));
+    startTransition(async () => {
+      await reassignGhostGamesAction(fd);
+      await load();
+      router.refresh();
+    });
+  };
+
+  const del = (gameIds: string[]) => {
+    if (!window.confirm(`Delete ${gameIds.length} game(s)? This can't be undone.`)) return;
+    const fd = new FormData();
+    fd.set("gameIds", gameIds.join(","));
+    startTransition(async () => {
+      await deletePhantomGamesAction(fd);
+      await load();
+      router.refresh();
+    });
+  };
+
+  if (!groups) {
+    return (
+      <button
+        onClick={load}
+        disabled={loading}
+        className="text-sm font-medium text-sky-600 hover:text-sky-800 disabled:opacity-50"
+      >
+        {loading ? "Loading…" : "Split games by opponent age…"}
+      </button>
+    );
+  }
+  if (groups.length === 0) return <p className="text-sm text-slate-400">No games to split.</p>;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        Each group is this ghost&rsquo;s games against opponents of one age. Send each group to the
+        correct same-club team, or delete it. Check play-ups before moving.
+      </p>
+      {groups.map((g, i) => (
+        <GhostSplitGroupRow key={i} group={g} busy={pending} onMove={move} onDelete={del} />
+      ))}
+    </div>
+  );
+}
+
+function GhostSplitGroupRow({
+  group,
+  busy,
+  onMove,
+  onDelete,
+}: {
+  group: GhostSplitGroup;
+  busy: boolean;
+  onMove: (gameIds: string[], targetId: string) => void;
+  onDelete: (gameIds: string[]) => void;
+}) {
+  const [showSearch, setShowSearch] = useState(false);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<MergeTargetOption[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const ids = group.games.map((g) => g.gameId);
+
+  const runSearch = async (e: FormEvent) => {
+    e.preventDefault();
+    if (query.trim().length < 2) return;
+    setSearching(true);
+    try {
+      setResults(await searchMergeTargets(query));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-slate-200 p-3">
+      <p className="mb-1 text-sm font-semibold text-slate-700">
+        {group.label} — {group.games.length} game{group.games.length === 1 ? "" : "s"}
+      </p>
+      <ul className="mb-2 max-h-32 overflow-auto text-xs text-slate-500">
+        {group.games.map((g) => (
+          <li key={g.gameId}>
+            {g.date} · vs {g.opponent} {g.us}-{g.them}
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-wrap gap-2">
+        {group.suggestedTargetId && (
+          <button
+            onClick={() => onMove(ids, group.suggestedTargetId!)}
+            disabled={busy}
+            className="btn-primary disabled:opacity-50"
+          >
+            Move to {group.suggestedTargetName}
+          </button>
+        )}
+        <button onClick={() => setShowSearch((v) => !v)} className="btn-ghost">
+          Choose target…
+        </button>
+        <button
+          onClick={() => onDelete(ids)}
+          disabled={busy}
+          className="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+        >
+          Delete
+        </button>
+      </div>
+      {showSearch && (
+        <div className="mt-2 space-y-2">
+          <form onSubmit={runSearch} className="flex gap-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search teams by name…"
+              className="flex-1 rounded-md border border-slate-300 px-3 py-1.5 text-sm"
+            />
+            <button type="submit" disabled={searching} className="btn-ghost disabled:opacity-50">
+              {searching ? "…" : "Search"}
+            </button>
+          </form>
+          {results &&
+            results.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onMove(ids, t.id)}
+                disabled={busy}
+                className="block w-full rounded-md border border-slate-200 px-3 py-1.5 text-left text-sm hover:bg-slate-50 disabled:opacity-50"
+              >
+                {t.name}{" "}
+                <span className="text-xs text-slate-400">{t.ageGroup ?? "?"}</span>
+              </button>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Suggestion({
   s,
   busy,
@@ -199,18 +373,10 @@ function Suggestion({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-slate-800">
-            {s.targetName}
-            {s.targetGcTeamId && (
-              <a
-                href={gcUrl(s.targetGcTeamId)}
-                target="_blank"
-                rel="noreferrer"
-                className="ml-2 text-xs font-normal text-sky-600 underline hover:text-sky-800"
-              >
-                GameChanger ↗
-              </a>
-            )}
+          <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-800">
+            <span className="truncate">{s.targetName}</span>
+            <NbrLink slug={s.targetSlug} />
+            <GcLink gcTeamId={s.targetGcTeamId} />
           </p>
           <p className="text-xs text-slate-500">
             {s.targetCity ? `${s.targetCity}${s.targetState ? `, ${s.targetState}` : ""}` : "no location"}

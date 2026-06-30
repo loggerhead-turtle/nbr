@@ -20,6 +20,7 @@ export default async function BadMergesPage({
   const vm: FindingVM[] = findings.map((f) => ({
     teamId: f.teamId,
     teamName: f.teamName,
+    teamSlug: f.teamSlug,
     teamAge: f.teamAge,
     gcTeamId: f.gcTeamId,
     ownCohortGames: f.ownCohortGames,
