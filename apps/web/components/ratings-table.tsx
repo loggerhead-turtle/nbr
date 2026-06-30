@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { TeamMedallion } from "@/components/team-medallion";
+import { TierBadge } from "@/components/tier-badge";
 import { ProvisionalBadge, GhostBadge } from "@/components/badges";
 import { teamMedallion } from "@/lib/medallion";
 import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
@@ -132,6 +133,7 @@ export function RatingsTable({
                       >
                         {r.name}
                       </Link>
+                      {r.tier && <TierBadge tier={r.tier} />}
                       <TeamMedallion tier={tier} />
                       {tier === "gray" && (
                         <Link

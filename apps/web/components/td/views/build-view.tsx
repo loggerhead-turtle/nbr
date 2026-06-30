@@ -8,7 +8,7 @@ import { divisionLabel, SectionTitle } from "../lib/ui";
 import { money } from "../lib/util";
 import { TeamSearch } from "./team-search";
 
-const NBR_LEVELS = ["NBR I", "NBR II", "NBR III"];
+const NBR_LEVELS = ["A", "AA", "AAA", "Majors"];
 
 export function BuildView() {
   const { selected, act, setTab } = useTd();
@@ -179,7 +179,7 @@ function AddDivisionForm({
   onAdd: (input: { ageGroup: string; nbrLevel: string; nbrMin: number | null; nbrMax: number | null }) => void;
 }) {
   const [ageGroup, setAgeGroup] = useState("U12");
-  const [nbrLevel, setNbrLevel] = useState("NBR I");
+  const [nbrLevel, setNbrLevel] = useState("AAA");
   const [nbrMin, setNbrMin] = useState("");
   const [nbrMax, setNbrMax] = useState("");
 

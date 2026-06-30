@@ -105,6 +105,57 @@ export function parseAgeOffsets(value: string | null | undefined): Record<string
   }
 }
 
+// ── NBR competitive tiers (A / AA / AAA / Majors) ──────────────────────────
+// A team's tier is its rating's percentile WITHIN its own age group (older teams
+// rate higher on the unified scale, so a global percentile would just re-encode
+// age). Cutoffs are the percentile lower-bounds and are admin-tunable.
+export const NBR_TIERS = ["A", "AA", "AAA", "Majors"] as const;
+export type NbrTier = (typeof NBR_TIERS)[number];
+export const TIER_CUTOFFS_KEY = "nbrTierCutoffs";
+export interface TierCutoffs {
+  AA: number;
+  AAA: number;
+  Majors: number;
+}
+/** USSSA-style pyramid: A <25th, AA 25–60, AAA 60–92, Majors top ~8%. */
+export const DEFAULT_TIER_CUTOFFS: TierCutoffs = { AA: 25, AAA: 60, Majors: 92 };
+/** Below this many established teams in an age group, tiers aren't meaningful. */
+export const MIN_TEAMS_FOR_TIERS = 5;
+
+export function parseTierCutoffs(value: string | null | undefined): TierCutoffs {
+  const d = DEFAULT_TIER_CUTOFFS;
+  if (!value) return { ...d };
+  try {
+    const o = JSON.parse(value) as Record<string, unknown>;
+    const clamp = (x: unknown, def: number) => {
+      const n = Number(x);
+      return Number.isFinite(n) ? Math.max(0, Math.min(100, Math.round(n))) : def;
+    };
+    const AA = clamp(o.AA, d.AA);
+    const AAA = Math.max(AA, clamp(o.AAA, d.AAA));
+    const Majors = Math.max(AAA, clamp(o.Majors, d.Majors));
+    return { AA, AAA, Majors };
+  } catch {
+    return { ...d };
+  }
+}
+
+/** Percentile (0–100) of `rating` within a same-age rating list (fraction below). */
+export function percentileOf(rating: number, sameAgeRatings: number[]): number {
+  const n = sameAgeRatings.length;
+  if (n <= 1) return 50;
+  let below = 0;
+  for (const r of sameAgeRatings) if (r < rating) below++;
+  return (below / (n - 1)) * 100;
+}
+
+export function tierForPercentile(pct: number, c: TierCutoffs = DEFAULT_TIER_CUTOFFS): NbrTier {
+  if (pct >= c.Majors) return "Majors";
+  if (pct >= c.AAA) return "AAA";
+  if (pct >= c.AA) return "AA";
+  return "A";
+}
+
 /** Cumulative cross-age offset (display points) for an age, 14U = 0, with the
  *  reduced step applied at/above AGE_OLDER_THRESHOLD. */
 export function ageBaselinePoints(
@@ -170,7 +221,7 @@ export type CreateGameInput = z.infer<typeof createGameSchema>;
 
 export const poolGenerateSchema = z.object({
   name: z.string().trim().max(120).optional(),
-  numPools: z.coerce.number().int().min(2).max(16),
+  numPools: z.coerce.number().int().min(1).max(256),
   teams: z
     .array(
       z.object({
