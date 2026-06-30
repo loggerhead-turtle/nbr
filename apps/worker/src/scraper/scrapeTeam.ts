@@ -177,13 +177,13 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
     if (doFullEnrich) console.log(`[scrape] enriched ${teamId} → "${header.name}"`);
   }
 
-  // After naming a stub, collapse a duplicate ghost (an old opponent) into it —
-  // but ONLY when we are highly confident it's the same club. Merging on
-  // name+age alone wrongly fused distinct clubs that share a name across
-  // regions (e.g. "Stars 14U" in UT vs CA). findAutoMergeTarget weighs age,
-  // location, coaches, shared games, and game-region overlap; anything short of
-  // high confidence is left for an admin on the Possible-duplicates page.
-  if (doFullEnrich) {
+  // After naming a stub we *could* collapse a matching ghost into it, but
+  // automatic merging proved too error-prone: a single wrong merge writes
+  // off-age games that then surface on opponents' schedules and make THEM look
+  // merged — a self-reinforcing mess. So auto-merge is OFF by default; all
+  // merges are now manual, reviewed actions on the age-safe Possible-duplicates
+  // and Ghost-teams pages. Set SCRAPER_AUTO_MERGE=true to re-enable.
+  if (doFullEnrich && envBool("SCRAPER_AUTO_MERGE", false)) {
     const finalAge = (data.ageGroup as AgeGroup | undefined) ?? (t.ageGroup as AgeGroup | null);
     const finalCoaches = (data.coaches as string[] | undefined) ?? t.coaches;
     const auto = await findAutoMergeTarget({
