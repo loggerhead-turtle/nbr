@@ -84,8 +84,14 @@ services:
 
   # DB-vs-reality reconcile: re-fetches each team's GameChanger schedule and
   # reports games we store that aren't on the team's own page (the phantom /
-  # mis-attributed games behind cross-age contamination). Report-only unless
-  # RECONCILE_APPLY=true. Needs Chromium → Docker. Trigger manually.
+  # mis-attributed games behind cross-age contamination). Needs Chromium → Docker.
+  # Env:
+  #   - no RECONCILE_TEAM  → full read-only CAPTURE of every verified team; writes
+  #     a snapshot for the /admin/reconcile page (RECONCILE_DELAY_SEC, default 3s,
+  #     between teams). Deletes nothing.
+  #   - RECONCILE_TEAM=<gcTeamId|id> → single team; report-only, or prune that
+  #     team's phantom extras when RECONCILE_APPLY=true.
+  # Trigger manually.
   - type: cron
     name: nbr-reconcile
     runtime: docker
