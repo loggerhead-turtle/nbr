@@ -10,9 +10,12 @@ export default async function BadMergesPage({
   searchParams: Promise<{ gap?: string }>;
 }) {
   const sp = await searchParams;
-  const gap = Math.max(2, Number(sp?.gap ?? "3") || 3);
+  const gap = Math.min(6, Math.max(1, Number(sp?.gap ?? "3") || 3));
 
-  const findings = await findCrossAgeMergeArtifacts(gap);
+  // One-year gaps include legitimate "play-ups", so demand a real cluster of
+  // off-age games (not a stray one or two) before flagging at that threshold.
+  const minOutliers = gap <= 1 ? 4 : 1;
+  const findings = await findCrossAgeMergeArtifacts(gap, 3, minOutliers);
   // Serialize for the client (Dates → ISO day strings).
   const vm: FindingVM[] = findings.map((f) => ({
     teamId: f.teamId,
@@ -37,6 +40,16 @@ export default async function BadMergesPage({
         Repairing moves those off-age games onto a regenerated ghost at the opponent&rsquo;s age,
         leaving the real team with only its own schedule, then triggers a ratings recompute. Review
         before applying. Lower the threshold to catch closer mismatches.
+        {gap <= 1 && (
+          <>
+            {" "}
+            <strong className="text-amber-700">
+              At the 1-year threshold, expect false positives:
+            </strong>{" "}
+            teams legitimately play up a year, so inspect each one (only clusters of 4+ off-age
+            games are shown) and open their GameChanger page before repairing.
+          </>
+        )}
       </p>
       <BadMergeReview findings={vm} gap={gap} />
     </div>

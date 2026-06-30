@@ -481,7 +481,13 @@ export interface BadMergeFinding {
 export async function findCrossAgeMergeArtifacts(
   minGap = 3,
   minOwnCohort = 3,
+  minOutliers = 1,
 ): Promise<BadMergeFinding[]> {
+  // When hunting 1-year gaps, only exact-age games count as the team's "own
+  // cohort" — a one-year play-up is legitimate and common, so for wider gaps it
+  // still counts as own. `minOutliers` lets the 1-year view demand a real
+  // cluster (not a stray play-up) before flagging.
+  const cohortRadius = minGap <= 1 ? 0 : 1;
   const teams = await prisma.team.findMany({
     where: { gcTeamId: { not: null }, ageGroup: { not: null } },
     select: {
@@ -525,7 +531,7 @@ export async function findCrossAgeMergeArtifacts(
       const oppAge = ageToNum(r.oppAge ?? ageGroupFromName(r.oppName));
       if (oppAge == null) continue;
       const gap = Math.abs(oppAge - teamAge);
-      if (gap <= 1) ownCohortGames += 1;
+      if (gap <= cohortRadius) ownCohortGames += 1;
       else if (gap >= minGap) {
         outliers.push({
           gameId: r.gameId,
@@ -538,7 +544,7 @@ export async function findCrossAgeMergeArtifacts(
       }
     }
 
-    if (ownCohortGames >= minOwnCohort && outliers.length > 0) {
+    if (ownCohortGames >= minOwnCohort && outliers.length >= minOutliers) {
       findings.push({
         teamId: t.id,
         teamName: t.name,

@@ -20,7 +20,7 @@ export interface FindingVM {
   outliers: OutlierVM[];
 }
 
-const GAP_OPTIONS = [2, 3, 4, 5];
+const GAP_OPTIONS = [1, 2, 3, 4, 5];
 
 export function BadMergeReview({ findings, gap }: { findings: FindingVM[]; gap: number }) {
   const [done, setDone] = useState<Set<string>>(new Set());

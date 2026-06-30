@@ -641,6 +641,40 @@ export async function dismissDuplicateAction(formData: FormData): Promise<void> 
   revalidatePath("/admin/duplicates");
 }
 
+/**
+ * "Revisit later" for a duplicate pair: hide it for a few days so the next
+ * scrape/recompute can add more games, then let it resurface. Stored as a JSON
+ * map (pairKey → ISO expiry) in AppSetting so no schema change is needed.
+ */
+export async function snoozeDuplicateAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const a = String(formData.get("teamIdA") ?? "");
+  const b = String(formData.get("teamIdB") ?? "");
+  if (!a || !b || a === b) return;
+  const [teamIdA, teamIdB] = a < b ? [a, b] : [b, a];
+  const key = `${teamIdA}|${teamIdB}`;
+  const days = Math.min(30, Math.max(1, Number(formData.get("days") ?? "1") || 1));
+  const until = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key: "duplicateSnoozes" } });
+    const map: Record<string, string> = row?.value ? JSON.parse(row.value) : {};
+    // Prune expired entries so the blob doesn't grow without bound.
+    const now = Date.now();
+    for (const [k, v] of Object.entries(map)) {
+      if (new Date(v).getTime() <= now) delete map[k];
+    }
+    map[key] = until;
+    await prisma.appSetting.upsert({
+      where: { key: "duplicateSnoozes" },
+      create: { key: "duplicateSnoozes", value: JSON.stringify(map) },
+      update: { value: JSON.stringify(map) },
+    });
+  } catch {
+    // ignore — snoozing is best-effort
+  }
+  revalidatePath("/admin/duplicates");
+}
+
 export async function deleteTeamAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("teamId") ?? "");
