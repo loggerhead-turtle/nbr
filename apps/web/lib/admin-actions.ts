@@ -10,6 +10,7 @@ import {
   findCrossAgeMergeArtifacts,
   repairCrossAgeMerge,
   deleteExactNameGhosts,
+  deleteOrphanGhosts,
 } from "@nbr/db";
 import {
   createTeamSchema,
@@ -521,6 +522,19 @@ export async function deleteExactNameGhostsAction(): Promise<void> {
   revalidatePath("/admin/duplicates");
   revalidatePath("/admin/teams");
   revalidatePath("/");
+}
+
+/**
+ * Delete every ghost with zero games (orphans — typically left behind after a
+ * reconcile prune). Safe: nothing references them. Recompute is unnecessary
+ * since they had no games, but we revalidate the pages whose counts change.
+ */
+export async function deleteOrphanGhostsAction(): Promise<void> {
+  await requireAdmin();
+  await deleteOrphanGhosts();
+  revalidatePath("/admin/ghosts");
+  revalidatePath("/admin/audit");
+  revalidatePath("/admin/teams");
 }
 
 /** Search real (non-ghost) teams to hand-pick a merge target for a ghost. */

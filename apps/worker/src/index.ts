@@ -15,6 +15,7 @@ import { runRecompute } from "./ratings/runRecompute.js";
 import { runBacktest } from "./ratings/runBacktest.js";
 import { runAgeDiagnostics } from "./ratings/runAgeDiagnostics.js";
 import { runFindBadMerges } from "./maintenance/findBadMerges.js";
+import { runCleanGhosts } from "./maintenance/cleanGhosts.js";
 
 async function main() {
   const command = process.argv[2];
@@ -50,9 +51,12 @@ async function main() {
     case "find-bad-merges":
       await runFindBadMerges(process.argv.slice(3));
       break;
+    case "clean-ghosts":
+      await runCleanGhosts();
+      break;
     default:
       console.error(
-        "Usage: node src/index.ts <scrape|scrape-one <gcTeamId>|scrape-new|maxpreps|geocode|reconcile [gcTeamId]|recompute|backtest|age-diagnostics|find-bad-merges>",
+        "Usage: node src/index.ts <scrape|scrape-one <gcTeamId>|scrape-new|maxpreps|geocode|reconcile [gcTeamId]|clean-ghosts|recompute|backtest|age-diagnostics|find-bad-merges>",
       );
       process.exitCode = 1;
   }

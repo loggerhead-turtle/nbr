@@ -444,6 +444,30 @@ export async function countExactNameGhostMatches(): Promise<number> {
 }
 
 /**
+ * Ghosts with no games at all — pure cruft, e.g. left behind after a reconcile
+ * prune removed their phantom games, or after an opponent was re-resolved to a
+ * real team. Nothing references them, so they're always safe to delete.
+ */
+export async function countOrphanGhosts(): Promise<number> {
+  return prisma.team.count({
+    where: { isGhost: true, homeGames: { none: {} }, awayGames: { none: {} } },
+  });
+}
+
+/** Delete every ghost team that has zero games. Returns how many were removed. */
+export async function deleteOrphanGhosts(): Promise<{ deleted: number }> {
+  const orphans = await prisma.team.findMany({
+    where: { isGhost: true, homeGames: { none: {} }, awayGames: { none: {} } },
+    select: { id: true },
+  });
+  const ids = orphans.map((o) => o.id);
+  if (ids.length > 0) {
+    await prisma.team.deleteMany({ where: { id: { in: ids } } });
+  }
+  return { deleted: ids.length };
+}
+
+/**
  * DELETE every ghost whose exact name matches a single verified (GameChanger)
  * team. The ghost — and its games, via the DB's ON DELETE CASCADE — is removed;
  * the verified team is untouched. We delete rather than merge on purpose: the
