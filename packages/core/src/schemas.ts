@@ -68,6 +68,43 @@ export const DEFAULT_AGE_STEP_OLDER = 75;
 /** Ages at/above this year use the reduced (older) step. */
 export const AGE_OLDER_THRESHOLD = 16;
 
+/**
+ * Per-age-group baseline offsets (display points, 14U = 0), set explicitly by an
+ * admin. Stored as JSON in AppSetting; overrides the per-year step model for the
+ * ages listed. Lets each bracket be tuned independently.
+ */
+export const AGE_OFFSETS_KEY = "ageOffsets";
+export const DEFAULT_AGE_OFFSETS: Record<string, number> = {
+  U8: -1200,
+  U9: -1000,
+  U10: -800,
+  U11: -600,
+  U12: -400,
+  U13: -200,
+  U14: 0,
+  U15: 100,
+  U16: 200,
+  U17: 237,
+  U18: 275,
+  OPEN: 350,
+};
+
+/** Parse a stored ageOffsets JSON blob into a clean {ageGroup: points} map. */
+export function parseAgeOffsets(value: string | null | undefined): Record<string, number> {
+  if (!value) return {};
+  try {
+    const obj = JSON.parse(value) as Record<string, unknown>;
+    const out: Record<string, number> = {};
+    for (const a of AGE_GROUPS) {
+      const n = Number(obj[a]);
+      if (Number.isFinite(n)) out[a] = Math.round(n);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /** Cumulative cross-age offset (display points) for an age, 14U = 0, with the
  *  reduced step applied at/above AGE_OLDER_THRESHOLD. */
 export function ageBaselinePoints(

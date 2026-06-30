@@ -8,8 +8,10 @@ import { computeRatings, computeRatingsBT, BT_SCALE, EngineGame, EngineOutput } 
 import {
   AGE_OFFSET_KEY,
   AGE_OFFSET_STEP_OLDER_KEY,
+  AGE_OFFSETS_KEY,
   AGE_OLDER_THRESHOLD,
   clampAgeStep,
+  parseAgeOffsets,
   DEFAULT_RATING_ALGORITHM,
   isRatingAlgorithm,
 } from "@nbr/core";
@@ -111,19 +113,29 @@ export async function runRecompute(): Promise<void> {
         }
       }
 
-      // The admin "points per age-year" settings drive the age curve. Convert
-      // display points → θ units (defaults: 200/yr; 75/yr for 16U+).
-      const [stepSetting, olderSetting] = await Promise.all([
+      // Age curve: explicit per-age-group offsets (admin) take precedence; the
+      // per-year step settings remain as a fallback for any age not set.
+      const [stepSetting, olderSetting, offsetsSetting] = await Promise.all([
         prisma.appSetting.findUnique({ where: { key: AGE_OFFSET_KEY } }).catch(() => null),
         prisma.appSetting.findUnique({ where: { key: AGE_OFFSET_STEP_OLDER_KEY } }).catch(() => null),
+        prisma.appSetting.findUnique({ where: { key: AGE_OFFSETS_KEY } }).catch(() => null),
       ]);
       const ageStepPoints = clampAgeStep(stepSetting?.value);
       const ageStepOlderPoints = clampAgeStep(olderSetting?.value ?? 75);
+      const offsets = parseAgeOffsets(offsetsSetting?.value);
+      const ageBaselineByGroup = new Map<string, number>(Object.entries(offsets));
       if (algorithm === "bt-age-v1") {
-        console.log(
-          `[recompute] age-curve prior: ${ageStepPoints} pts/age-year ` +
-            `(${ageStepOlderPoints} pts/yr at ${AGE_OLDER_THRESHOLD}U+)`,
-        );
+        if (ageBaselineByGroup.size > 0) {
+          const curve = [...ageBaselineByGroup.entries()]
+            .map(([a, p]) => `${a}:${p > 0 ? "+" : ""}${p}`)
+            .join(" ");
+          console.log(`[recompute] per-age offsets (pts, 14U=0): ${curve}`);
+        } else {
+          console.log(
+            `[recompute] age-curve prior: ${ageStepPoints} pts/age-year ` +
+              `(${ageStepOlderPoints} pts/yr at ${AGE_OLDER_THRESHOLD}U+)`,
+          );
+        }
       }
 
       output = computeRatingsBT(engineGames, {
@@ -133,6 +145,7 @@ export async function runRecompute(): Promise<void> {
         ...(algorithm === "bt-age-v1"
           ? {
               ageGroup,
+              ageBaselineByGroup,
               ageStepPrior: ageStepPoints / BT_SCALE,
               ageStepOlder: ageStepOlderPoints / BT_SCALE,
               ageOlderThreshold: AGE_OLDER_THRESHOLD,
