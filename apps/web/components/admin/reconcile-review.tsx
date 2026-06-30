@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { deletePhantomGamesAction, clearTeamGcIdAction } from "@/lib/admin-actions";
+import {
+  deletePhantomGamesAction,
+  clearTeamGcIdAction,
+  recomputeRatingsAction,
+} from "@/lib/admin-actions";
 import type { ReconcileSnapshot, ReconcileTeamFinding } from "@nbr/core";
 
 const gcUrl = (id: string) => `https://web.gc.com/teams/${id}/schedule`;
@@ -22,15 +26,60 @@ function GcLink({ gcTeamId }: { gcTeamId: string | null }) {
 }
 
 export function ReconcileReview({ snapshot }: { snapshot: ReconcileSnapshot }) {
+  const router = useRouter();
   const [resolved, setResolved] = useState<Set<string>>(new Set());
+  const [pending, startTransition] = useTransition();
   const markDone = (teamId: string) => setResolved((p) => new Set(p).add(teamId));
 
   const withExtras = snapshot.withExtras.filter((t) => !resolved.has(t.teamId));
   const deadIds = snapshot.deadIds.filter((t) => !resolved.has(t.teamId));
   const captured = new Date(snapshot.capturedAt);
 
+  const nonSparse = withExtras.filter((t) => !t.sparse);
+  const nonSparseIds = nonSparse.flatMap((t) => t.extras.map((g) => g.gameId));
+
+  const bulkDelete = () => {
+    if (nonSparseIds.length === 0) return;
+    if (
+      !window.confirm(
+        `Delete ${nonSparseIds.length} phantom game(s) across ${nonSparse.length} non-sparse team(s)?\n\n` +
+          "Sparse teams are skipped for manual review. Nothing recomputes until you click Recompute. Can't be undone.",
+      )
+    )
+      return;
+    const fd = new FormData();
+    fd.set("gameIds", nonSparseIds.join(","));
+    startTransition(async () => {
+      await deletePhantomGamesAction(fd);
+      nonSparse.forEach((t) => markDone(t.teamId));
+      router.refresh();
+    });
+  };
+
+  const recompute = () => {
+    startTransition(async () => {
+      await recomputeRatingsAction();
+    });
+  };
+
   return (
     <div className="space-y-8">
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <button
+          onClick={bulkDelete}
+          disabled={pending || nonSparseIds.length === 0}
+          className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+        >
+          🗑 Delete all {nonSparseIds.length} phantoms on non-sparse teams
+        </button>
+        <button onClick={recompute} disabled={pending} className="btn-primary disabled:opacity-50">
+          ↻ Recompute ratings
+        </button>
+        <span className="text-xs text-slate-500">
+          Deletes don&rsquo;t auto-recompute — review/delete first, then hit Recompute once.
+        </span>
+      </div>
+
       <p className="text-xs text-slate-400">
         Captured {captured.toLocaleString()} · {snapshot.teamsScanned} verified team(s) scanned.
         Deletes here act on the saved snapshot — no GameChanger re-scrape.
@@ -94,7 +143,7 @@ function ExtrasCard({ team, onDone }: { team: ReconcileTeamFinding; onDone: () =
           (team.sparse
             ? "⚠️ This team's live page is sparse — make sure these really don't belong before deleting.\n\n"
             : "") +
-          "This removes the games and re-runs ratings. It can't be undone.",
+          "This removes the games. Click Recompute up top when you're done. Can't be undone.",
       )
     )
       return;

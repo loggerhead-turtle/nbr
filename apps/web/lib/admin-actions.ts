@@ -701,10 +701,17 @@ export async function deletePhantomGamesAction(formData: FormData): Promise<void
     .map((s) => s.trim())
     .filter(Boolean);
   if (ids.length === 0) return;
+  // No recompute here on purpose — when clearing phantoms across many teams you'd
+  // otherwise kick a recompute job per click. Hit "Recompute" once when done.
   await prisma.game.deleteMany({ where: { id: { in: ids } } });
-  await triggerRecompute();
   revalidatePath("/admin/reconcile");
   revalidatePath("/");
+}
+
+/** Kick a single ratings recompute — use after a batch of reconcile deletes. */
+export async function recomputeRatingsAction(): Promise<void> {
+  await requireAdmin();
+  await triggerRecompute();
 }
 
 /**
