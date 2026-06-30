@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { mergeTeamAction, dismissDuplicateAction } from "@/lib/admin-actions";
+import { mergeTeamAction, dismissDuplicateAction, deleteTeamAction } from "@/lib/admin-actions";
 import type { DupPair, DupTeam, DupGame } from "@/lib/duplicates";
 import type { MergeTier } from "@nbr/core";
 
@@ -10,6 +10,12 @@ const TIER_STYLE: Record<MergeTier, { bar: string; chip: string; label: string }
   medium: { bar: "bg-amber-500", chip: "bg-amber-100 text-amber-800", label: "Medium confidence" },
   low: { bar: "bg-rose-500", chip: "bg-rose-100 text-rose-800", label: "Low confidence" },
   none: { bar: "bg-slate-400", chip: "bg-slate-200 text-slate-700", label: "Not a match" },
+};
+
+const REC_STYLE: Record<DupPair["recommendation"]["kind"], { box: string; label: string }> = {
+  "delete-safe": { box: "border-emerald-100 bg-emerald-50", label: "Safe to delete the duplicate" },
+  merge: { box: "border-sky-100 bg-sky-50", label: "Merge to combine" },
+  review: { box: "border-amber-100 bg-amber-50", label: "Needs a look" },
 };
 
 function gcUrl(gcTeamId: string): string {
@@ -31,6 +37,27 @@ export function DuplicateReview({ initialPairs }: { initialPairs: DupPair[] }) {
     fd.set("targetId", pair.a.id); // …into the one we keep
     startTransition(async () => {
       await mergeTeamAction(fd);
+      remove(key);
+      setBusyId(null);
+    });
+  };
+
+  const onDelete = (pair: DupPair, deleteId: string) => {
+    const target = deleteId === pair.b.id ? pair.b : pair.a;
+    const keep = deleteId === pair.b.id ? pair.a : pair.b;
+    if (
+      !window.confirm(
+        `Delete “${target.name}” and its ${target.totalGames} game(s)?\n\n` +
+          `Its games already exist on “${keep.name}”, so nothing is lost. This cannot be undone.`,
+      )
+    )
+      return;
+    const key = `${pair.a.id}|${pair.b.id}`;
+    setBusyId(key);
+    const fd = new FormData();
+    fd.set("teamId", deleteId);
+    startTransition(async () => {
+      await deleteTeamAction(fd);
       remove(key);
       setBusyId(null);
     });
@@ -69,6 +96,7 @@ export function DuplicateReview({ initialPairs }: { initialPairs: DupPair[] }) {
         const isBusy = pending && busyId === key;
         const conf = pair.confidence;
         const style = TIER_STYLE[conf.tier];
+        const rec = pair.recommendation;
         return (
           <div key={key} className={`card overflow-hidden ${isBusy ? "opacity-50" : ""}`}>
             {/* Heat-map bar — width + colour encode merge confidence. */}
@@ -106,6 +134,28 @@ export function DuplicateReview({ initialPairs }: { initialPairs: DupPair[] }) {
                 ))}
               </div>
             )}
+
+            {/* Plain-English recommendation + the game-overlap evidence. */}
+            <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-sm ${REC_STYLE[rec.kind].box}`}>
+              <span className="font-semibold">{REC_STYLE[rec.kind].label}</span>
+              <span className="text-slate-600">{rec.note}</span>
+              <span className="ml-auto flex flex-wrap gap-1.5 text-xs">
+                <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800">
+                  {pair.overlap.exact} exact
+                </span>
+                {pair.overlap.diffScore > 0 && (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">
+                    {pair.overlap.diffScore} diff-score
+                  </span>
+                )}
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">
+                  {pair.overlap.uniqueA} only on “{pair.a.name}”
+                </span>
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">
+                  {pair.overlap.uniqueB} only on “{pair.b.name}”
+                </span>
+              </span>
+            </div>
 
             <div className="grid grid-cols-1 gap-px bg-slate-200 sm:grid-cols-2">
               <TeamSide team={pair.a} role="Keep" />
@@ -149,6 +199,15 @@ export function DuplicateReview({ initialPairs }: { initialPairs: DupPair[] }) {
               >
                 ✓ Merge ({pair.b.name} → {pair.a.name})
               </button>
+              {rec.kind === "delete-safe" && (
+                <button
+                  onClick={() => onDelete(pair, rec.deleteId)}
+                  disabled={isBusy}
+                  className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+                >
+                  🗑 Delete duplicate ({pair.b.name})
+                </button>
+              )}
               <button onClick={() => onDismiss(pair)} disabled={isBusy} className="btn-ghost disabled:opacity-50">
                 ✗ Not a duplicate
               </button>

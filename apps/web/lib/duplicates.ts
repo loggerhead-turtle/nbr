@@ -1,5 +1,5 @@
 import { prisma } from "@nbr/db";
-import { scoreMerge, type MergeScore } from "@nbr/core";
+import { scoreMerge, normalizeTeamName, type MergeScore } from "@nbr/core";
 
 /**
  * Normalization for duplicate detection. Unlike the scraper's opponent-matching
@@ -72,6 +72,12 @@ async function getCandidatePairs(): Promise<[string, string][]> {
   ]);
   const dismissed = new Set(dismissals.map((d) => `${d.teamIdA}|${d.teamIdB}`));
   const norm = new Map(teams.map((t) => [t.id, dupNorm(t.name)] as const));
+  // Shared-game matching keys on the opponent's normalized NAME (age stripped)
+  // rather than its row id. In a name-collision mess the opponents are duplicated
+  // too, so the SAME real game scraped onto two "Utah Legends" rows points at two
+  // different "Slammers" rows — id matching would see zero shared games. Matching
+  // by name + date + score finds it.
+  const oppName = new Map(teams.map((t) => [t.id, normalizeTeamName(t.name)] as const));
 
   const pairScores = new Map<string, number>(); // pairKey "a|b" -> identical-matchup count
   const bump = (x: string, y: string) => {
@@ -90,8 +96,10 @@ async function getCandidatePairs(): Promise<[string, string][]> {
   };
   for (const g of games) {
     const day = g.playedAt.toISOString().slice(0, 10);
-    add(`${g.awayTeamId}|${day}|${g.homeScore}-${g.awayScore}`, g.homeTeamId);
-    add(`${g.homeTeamId}|${day}|${g.awayScore}-${g.homeScore}`, g.awayTeamId);
+    const home = oppName.get(g.homeTeamId) ?? "";
+    const away = oppName.get(g.awayTeamId) ?? "";
+    add(`${away}|${day}|${g.homeScore}-${g.awayScore}`, g.homeTeamId);
+    add(`${home}|${day}|${g.awayScore}-${g.homeScore}`, g.awayTeamId);
   }
   for (const bucket of matchup.values()) {
     const uniq = [...new Set(bucket)];
@@ -127,8 +135,12 @@ async function getCandidatePairs(): Promise<[string, string][]> {
     if (score >= 2) candidates.add(k);
   }
 
+  // Order by identical-matchup count (strongest "same team" evidence) first, so
+  // the page's top-N cap keeps the most certain duplicates rather than whichever
+  // happened to hash first.
   return [...candidates]
     .filter((k) => !dismissed.has(k))
+    .sort((x, y) => (pairScores.get(y) ?? 0) - (pairScores.get(x) ?? 0))
     .map((k) => k.split("|") as [string, string]);
 }
 
@@ -173,12 +185,37 @@ export interface DupTeam {
   regionStates: string[];
 }
 
+/** How the two rows' game sets overlap — the human-checkable evidence. */
+export interface DupOverlap {
+  /** Same opponent + date + identical score on both rows (strongest proof). */
+  exact: number;
+  /** Same opponent + date but the score differs (same game, scraped twice). */
+  diffScore: number;
+  /** Games only the kept row (a) has. */
+  uniqueA: number;
+  /** Games only the other row (b) has. */
+  uniqueB: number;
+}
+
+/**
+ * What to do with the pair. "delete-safe" means b's games are entirely a subset
+ * of a's, so deleting b loses nothing; "merge" means each row has games the other
+ * lacks (merge combines them); "review" means the evidence is too thin to act
+ * one-click.
+ */
+export type DupRecommendation =
+  | { kind: "delete-safe"; deleteId: string; note: string }
+  | { kind: "merge"; note: string }
+  | { kind: "review"; note: string };
+
 export interface DupPair {
   a: DupTeam;
   b: DupTeam;
   commonGames: SharedGame[];
   /** Merge confidence (same model the scraper uses to auto-merge). */
   confidence: MergeScore;
+  overlap: DupOverlap;
+  recommendation: DupRecommendation;
 }
 
 async function loadDupTeam(
@@ -209,7 +246,11 @@ async function loadDupTeam(
     })),
   ].sort((x, y) => (x.date < y.date ? 1 : -1));
 
-  const byKey = new Map(games.map((g) => [`${g.oppId}|${g.date}`, g] as const));
+  // Key by normalized opponent NAME + date (not opponent id) so the same real
+  // game is matched across duplicated opponent rows.
+  const byKey = new Map(
+    games.map((g) => [`${normalizeTeamName(g.opponent)}|${g.date}`, g] as const),
+  );
   // Locality proxy: states of opponents we actually located (they have a city;
   // ghosts default to "UT" and would otherwise fake a match).
   const regionStates = [
@@ -262,6 +303,43 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
     const a = keepA >= 0 ? ra.team : rb.team;
     const b = keepA >= 0 ? rb.team : ra.team;
 
+    // Game-overlap breakdown. commonGames.length = keys present on both rows;
+    // the rest of each row's keys are that row's unique games.
+    const exact = commonGames.filter((g) => g.scoresMatch).length;
+    const diffScore = commonGames.length - exact;
+    const raUnique = ra.byKey.size - commonGames.length;
+    const rbUnique = rb.byKey.size - commonGames.length;
+    const overlap: DupOverlap = {
+      exact,
+      diffScore,
+      uniqueA: keepA >= 0 ? raUnique : rbUnique,
+      uniqueB: keepA >= 0 ? rbUnique : raUnique,
+    };
+
+    // Two exact matches (opponent + date + score) is near-proof it's one team.
+    const strong = exact >= 2;
+    let recommendation: DupRecommendation;
+    if (strong && overlap.uniqueB === 0 && b.totalGames > 0) {
+      recommendation = {
+        kind: "delete-safe",
+        deleteId: b.id,
+        note: `Every game on “${b.name}” already exists on “${a.name}” — deleting it loses nothing.`,
+      };
+    } else if (strong) {
+      recommendation = {
+        kind: "merge",
+        note: `Both rows have games the other lacks — merge to combine them (no game is lost).`,
+      };
+    } else {
+      recommendation = {
+        kind: "review",
+        note:
+          exact === 0
+            ? `No exact game matches — check the games below before acting.`
+            : `Only 1 exact game match — could be a tournament coincidence. Check the games below.`,
+      };
+    }
+
     const confidence = scoreMerge({
       nameA: a.name,
       nameB: b.name,
@@ -273,12 +351,14 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
       stateB: b.city ? b.state : null,
       coachesA: a.coaches,
       coachesB: b.coaches,
-      sharedGameCount: commonGames.length,
+      // Strict count — same opponent + date + identical score — is the strongest
+      // "same team" proof, so feed that (not date-only overlaps) to the scorer.
+      sharedGameCount: exact,
       regionStatesA: a.regionStates,
       regionStatesB: b.regionStates,
     });
 
-    out.push({ a, b, commonGames, confidence });
+    out.push({ a, b, commonGames, confidence, overlap, recommendation });
   }
   // Heat map: highest-confidence pairs first so the easy merges are up top.
   return out.sort(
