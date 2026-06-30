@@ -239,6 +239,53 @@ function Suggestion({
           ))}
         </div>
       )}
+
+      {/* The evidence: matchups the ghost and this target both played. */}
+      {s.sharedGames.length > 0 ? (
+        <div className="mt-2 overflow-x-auto rounded-md border border-slate-200">
+          <table className="w-full text-xs">
+            <thead className="bg-slate-50 text-[10px] uppercase tracking-wide text-slate-400">
+              <tr>
+                <th className="px-2 py-1 text-left font-semibold">Date · Opponent</th>
+                <th className="px-2 py-1 text-right font-semibold">Ghost</th>
+                <th className="px-2 py-1 text-right font-semibold">{s.targetName}</th>
+                <th className="px-1 py-1" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {s.sharedGames.slice(0, 8).map((g, i) => (
+                <tr key={i} className={g.scoresMatch ? "" : "bg-amber-50"}>
+                  <td className="px-2 py-1 text-slate-600">
+                    {g.date} · vs {g.opponent}
+                  </td>
+                  <td className="px-2 py-1 text-right tabular-nums">
+                    {g.aUs}-{g.aThem}
+                  </td>
+                  <td className="px-2 py-1 text-right tabular-nums">
+                    {g.bUs}-{g.bThem}
+                  </td>
+                  <td
+                    className="px-1 py-1 text-center"
+                    title={g.scoresMatch ? "scores match" : "scores differ"}
+                  >
+                    {g.scoresMatch ? "✅" : "⚠️"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {s.sharedGames.length > 8 && (
+            <p className="px-2 py-1 text-[10px] text-slate-400">
+              +{s.sharedGames.length - 8} more shared game(s)
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="mt-2 text-xs text-slate-400">
+          No games in common — this suggestion rests on name/location only, so verify on GameChanger
+          before merging.
+        </p>
+      )}
     </div>
   );
 }

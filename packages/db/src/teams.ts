@@ -70,26 +70,96 @@ async function teamRegionStates(teamId: string, otherId?: string): Promise<strin
   return states;
 }
 
-/** Count exact shared matchups (same opponent team + same day) between two teams. */
-async function sharedMatchupCount(aId: string, bId: string): Promise<number> {
-  const keysFor = async (teamId: string, otherId: string) => {
-    const games = await prisma.game.findMany({
-      where: { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] },
-      select: { homeTeamId: true, awayTeamId: true, playedAt: true },
-      take: 500,
+/** A matchup two teams both played, with each team's recorded score — the
+ * human-checkable evidence shown on the Ghost-teams page. */
+export interface SharedGameRow {
+  opponent: string;
+  date: string;
+  aUs: number | null;
+  aThem: number | null;
+  bUs: number | null;
+  bThem: number | null;
+  scoresMatch: boolean;
+}
+
+/**
+ * Games two teams BOTH played against the same opponent on the same day, matched
+ * by the opponent's NORMALIZED NAME (not its row id) — so duplicated opponents
+ * don't hide the match (the exact blind spot that made suggestions look weak).
+ * Returns the rows so the UI can show the evidence; games the two teams played
+ * directly against each other are excluded.
+ */
+async function sharedGamesByName(aId: string, bId: string): Promise<SharedGameRow[]> {
+  const load = async (teamId: string, otherId: string) => {
+    const t = await prisma.team.findUnique({
+      where: { id: teamId },
+      select: {
+        homeGames: {
+          where: { status: "FINAL" },
+          select: {
+            awayTeamId: true,
+            homeScore: true,
+            awayScore: true,
+            playedAt: true,
+            awayTeam: { select: { name: true } },
+          },
+        },
+        awayGames: {
+          where: { status: "FINAL" },
+          select: {
+            homeTeamId: true,
+            homeScore: true,
+            awayScore: true,
+            playedAt: true,
+            homeTeam: { select: { name: true } },
+          },
+        },
+      },
     });
-    const keys = new Set<string>();
-    for (const g of games) {
-      const oppId = g.homeTeamId === teamId ? g.awayTeamId : g.homeTeamId;
-      if (oppId === otherId) continue; // games directly against each other don't count
-      keys.add(`${oppId}|${g.playedAt.toISOString().slice(0, 10)}`);
+    const m = new Map<string, { opponent: string; us: number | null; them: number | null }>();
+    if (!t) return m;
+    for (const g of t.homeGames) {
+      if (g.awayTeamId === otherId) continue;
+      const day = g.playedAt.toISOString().slice(0, 10);
+      m.set(`${normalizeTeamName(g.awayTeam.name)}|${day}`, {
+        opponent: g.awayTeam.name,
+        us: g.homeScore,
+        them: g.awayScore,
+      });
     }
-    return keys;
+    for (const g of t.awayGames) {
+      if (g.homeTeamId === otherId) continue;
+      const day = g.playedAt.toISOString().slice(0, 10);
+      m.set(`${normalizeTeamName(g.homeTeam.name)}|${day}`, {
+        opponent: g.homeTeam.name,
+        us: g.awayScore,
+        them: g.homeScore,
+      });
+    }
+    return m;
   };
-  const [ka, kb] = await Promise.all([keysFor(aId, bId), keysFor(bId, aId)]);
-  let n = 0;
-  for (const k of ka) if (kb.has(k)) n += 1;
-  return n;
+  const [ma, mb] = await Promise.all([load(aId, bId), load(bId, aId)]);
+  const out: SharedGameRow[] = [];
+  for (const [k, a] of ma) {
+    const b = mb.get(k);
+    if (!b) continue;
+    out.push({
+      opponent: a.opponent,
+      date: k.slice(k.lastIndexOf("|") + 1),
+      aUs: a.us,
+      aThem: a.them,
+      bUs: b.us,
+      bThem: b.them,
+      scoresMatch: a.us === b.us && a.them === b.them,
+    });
+  }
+  out.sort((x, y) => (x.date < y.date ? 1 : -1));
+  return out;
+}
+
+/** Count shared matchups (same opponent name + same day) between two teams. */
+async function sharedMatchupCount(aId: string, bId: string): Promise<number> {
+  return (await sharedGamesByName(aId, bId)).length;
 }
 
 export interface AutoMergeTarget {
@@ -169,6 +239,8 @@ export interface GhostMergeSuggestion {
   targetState: string | null;
   targetGcTeamId: string | null;
   score: MergeScore;
+  /** Matchups the ghost and this target both played — the evidence to eyeball. */
+  sharedGames: SharedGameRow[];
 }
 
 export interface GhostTeamWithSuggestions {
@@ -253,8 +325,8 @@ export async function getGhostTeamsWithSuggestions(limit = 100): Promise<GhostTe
 
     const suggestions: GhostMergeSuggestion[] = [];
     for (const { c } of prelim) {
-      const [shared, ghostRegion, targetRegion] = await Promise.all([
-        sharedMatchupCount(g.id, c.id),
+      const [sharedGames, ghostRegion, targetRegion] = await Promise.all([
+        sharedGamesByName(g.id, c.id),
         teamRegionStates(g.id, c.id),
         teamRegionStates(c.id, g.id),
       ]);
@@ -269,7 +341,7 @@ export async function getGhostTeamsWithSuggestions(limit = 100): Promise<GhostTe
         stateB: c.state,
         coachesA: g.coaches,
         coachesB: c.coaches,
-        sharedGameCount: shared,
+        sharedGameCount: sharedGames.length,
         regionStatesA: ghostRegion,
         regionStatesB: targetRegion,
       });
@@ -280,6 +352,7 @@ export async function getGhostTeamsWithSuggestions(limit = 100): Promise<GhostTe
         targetState: c.state,
         targetGcTeamId: c.gcTeamId,
         score,
+        sharedGames,
       });
     }
     suggestions.sort((a, b) => b.score.score - a.score.score);

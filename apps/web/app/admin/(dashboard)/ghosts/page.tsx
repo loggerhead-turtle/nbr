@@ -20,8 +20,12 @@ export default async function GhostsPage() {
         Ghosts are opponents auto-created from other teams&rsquo; schedules before the real team was
         added. Each row shows the ghost and its best <strong>real-team</strong> merge targets, scored
         by the same confidence model the scraper uses (name, age, city/state, coaching staff, shared
-        games, game-region overlap). Merge into the suggested team, search for a different target, or
-        leave it. Merging folds the ghost&rsquo;s games into the real team and deletes the ghost.
+        games, game-region overlap). Each suggestion now lists the{" "}
+        <strong>games the two actually share</strong> — same opponent and date, with each side&rsquo;s
+        score (<span className="text-emerald-700">✅</span> match,{" "}
+        <span className="text-amber-700">⚠️</span> differ) — so you can verify the match yourself
+        instead of trusting the score. Merge into the suggested team, search for a different target,
+        or leave it. Merging folds the ghost&rsquo;s games into the real team and deletes the ghost.
       </p>
       <BulkGhostDelete count={exactMatchCount} />
       <GhostReview withMatch={withMatch} orphans={orphans} />
