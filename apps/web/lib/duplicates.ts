@@ -60,8 +60,12 @@ function nameSimilarity(a: string, b: string): number {
 const SIM_THRESHOLD = 0.72;
 const MAX_FUZZY_COMPARISONS = 200000;
 
-/** Compute all candidate pairs (ids only). Shared by the badge count and page. */
-async function getCandidatePairs(): Promise<[string, string][]> {
+/**
+ * One pass over teams + games to find candidate duplicate pairs and how many
+ * identical matchups each pair shares (the strongest evidence). Shared by the
+ * review page, the nav badge count, and the audit summary.
+ */
+async function scanCandidates() {
   const [teams, games, dismissals] = await Promise.all([
     prisma.team.findMany({ select: { id: true, name: true } }),
     prisma.game.findMany({
@@ -135,11 +139,43 @@ async function getCandidatePairs(): Promise<[string, string][]> {
     if (score >= 2) candidates.add(k);
   }
 
+  return { candidates, pairScores, dismissed };
+}
+
+/** AppSetting key holding a JSON map of pairKey → ISO "snoozed until" timestamp. */
+const SNOOZE_KEY = "duplicateSnoozes";
+
+/** Pairs the admin snoozed ("revisit later") that are still within their window. */
+async function getActiveSnoozes(): Promise<Set<string>> {
+  const active = new Set<string>();
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key: SNOOZE_KEY } });
+    if (!row?.value) return active;
+    const map = JSON.parse(row.value) as Record<string, string>;
+    const now = Date.now();
+    for (const [k, until] of Object.entries(map)) {
+      if (new Date(until).getTime() > now) active.add(k);
+    }
+  } catch {
+    // ignore — snoozes are best-effort
+  }
+  return active;
+}
+
+/**
+ * Candidate pairs (ids only), strongest evidence first, with dismissed and
+ * still-snoozed pairs removed. Shared by the nav badge and the review page.
+ */
+async function getCandidatePairs(): Promise<[string, string][]> {
+  const [{ candidates, pairScores, dismissed }, snoozed] = await Promise.all([
+    scanCandidates(),
+    getActiveSnoozes(),
+  ]);
   // Order by identical-matchup count (strongest "same team" evidence) first, so
   // the page's top-N cap keeps the most certain duplicates rather than whichever
   // happened to hash first.
   return [...candidates]
-    .filter((k) => !dismissed.has(k))
+    .filter((k) => !dismissed.has(k) && !snoozed.has(k))
     .sort((x, y) => (pairScores.get(y) ?? 0) - (pairScores.get(x) ?? 0))
     .map((k) => k.split("|") as [string, string]);
 }
@@ -150,6 +186,50 @@ export async function countDuplicateCandidates(): Promise<number> {
   } catch {
     return 0;
   }
+}
+
+export interface DuplicateAuditSummary {
+  /** Active (not dismissed, not snoozed) candidate pairs. */
+  totalPairs: number;
+  /** Pairs sharing 2+ identical matchups — near-certain duplicates. */
+  nearCertain: number;
+  /** Pairs sharing exactly one identical matchup. */
+  oneShared: number;
+  /** Pairs flagged by name/region similarity only (no identical shared game). */
+  nameOnly: number;
+  /** Pairs currently snoozed for later. */
+  snoozed: number;
+}
+
+/**
+ * Blast-radius numbers for the audit page. Computed from a single scan (no
+ * per-pair game loads) so it stays cheap even with thousands of pairs.
+ */
+export async function getDuplicateAuditSummary(): Promise<DuplicateAuditSummary> {
+  const [{ candidates, pairScores, dismissed }, snoozed] = await Promise.all([
+    scanCandidates(),
+    getActiveSnoozes(),
+  ]);
+  const summary: DuplicateAuditSummary = {
+    totalPairs: 0,
+    nearCertain: 0,
+    oneShared: 0,
+    nameOnly: 0,
+    snoozed: 0,
+  };
+  for (const k of candidates) {
+    if (dismissed.has(k)) continue;
+    if (snoozed.has(k)) {
+      summary.snoozed += 1;
+      continue;
+    }
+    summary.totalPairs += 1;
+    const s = pairScores.get(k) ?? 0;
+    if (s >= 2) summary.nearCertain += 1;
+    else if (s === 1) summary.oneShared += 1;
+    else summary.nameOnly += 1;
+  }
+  return summary;
 }
 
 export interface DupGame {

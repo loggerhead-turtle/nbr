@@ -55,6 +55,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Add game
           </Link>
           <Link
+            href="/admin/audit"
+            className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Audit
+          </Link>
+          <Link
             href="/admin/duplicates"
             className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
           >
