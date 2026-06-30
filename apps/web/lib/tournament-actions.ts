@@ -117,6 +117,61 @@ export async function inviteTeamAction(formData: FormData): Promise<void> {
   revalidatePath(`/td/${tournamentId}`);
 }
 
+/** Bulk-invite every team in `teamIds` (skips already-invited/declined). */
+export async function inviteTeamsAction(formData: FormData): Promise<void> {
+  const tdId = await requireApprovedTd();
+  const tournamentId = String(formData.get("tournamentId") ?? "");
+  let ids: string[] = [];
+  try {
+    ids = JSON.parse(String(formData.get("teamIds") ?? "[]"));
+  } catch {
+    ids = [];
+  }
+  if (!tournamentId || !Array.isArray(ids) || ids.length === 0) return;
+  if (!(await ownsTournament(tdId, tournamentId))) return;
+
+  const existing = await prisma.tournamentInvite.findMany({
+    where: { tournamentId, teamId: { in: ids } },
+    select: { teamId: true },
+  });
+  const skip = new Set(existing.map((e) => e.teamId));
+  const toCreate = ids.filter((id) => !skip.has(id)).slice(0, 200);
+  if (toCreate.length === 0) {
+    revalidatePath(`/td/${tournamentId}`);
+    return;
+  }
+
+  await prisma.tournamentInvite.createMany({
+    data: toCreate.map((teamId) => ({ tournamentId, teamId })),
+    skipDuplicates: true,
+  });
+
+  // Notify claimed coaches.
+  const [tournament, teams] = await Promise.all([
+    prisma.tournament.findUnique({ where: { id: tournamentId } }),
+    prisma.team.findMany({
+      where: { id: { in: toCreate } },
+      include: { claim: { include: { user: true } } },
+    }),
+  ]);
+  for (const team of teams) {
+    if (team.claim?.user?.email) {
+      await sendEmail({
+        to: team.claim.user.email,
+        subject: `${team.name} invited to ${tournament?.name ?? "a tournament"}`,
+        html: emailLayout(
+          "You’ve got a tournament invitation",
+          `<p><strong>${team.name}</strong> has been invited to <strong>${tournament?.name ?? "a tournament"}</strong>.</p>
+           <p>Accept or decline from your account.</p>`,
+          { label: "View invitation", url: siteUrl("/account") },
+        ),
+      });
+    }
+  }
+
+  revalidatePath(`/td/${tournamentId}`);
+}
+
 export async function removeInviteAction(formData: FormData): Promise<void> {
   const tdId = await requireApprovedTd();
   const id = String(formData.get("inviteId") ?? "");

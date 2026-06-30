@@ -48,6 +48,33 @@ export async function GET(req: NextRequest) {
     orderBy: { rating: { rating: "desc" } },
   });
 
+  // Optional: how many of THIS director's tournaments each team has attended
+  // (any age group), shown to the TD as a loyalty signal. Needs a tournamentId.
+  const tournamentId = p.get("tournamentId")?.trim() || undefined;
+  const participation = new Map<string, number>();
+  if (tournamentId) {
+    const tourney = await prisma.tournament.findUnique({
+      where: { id: tournamentId },
+      select: { directorUserId: true },
+    });
+    if (tourney) {
+      const invs = await prisma.tournamentInvite.findMany({
+        where: {
+          teamId: { in: teams.map((t) => t.id) },
+          status: "ACCEPTED",
+          tournament: { directorUserId: tourney.directorUserId },
+        },
+        select: { teamId: true, tournamentId: true },
+      });
+      const byTeam = new Map<string, Set<string>>();
+      for (const i of invs) {
+        if (!byTeam.has(i.teamId)) byTeam.set(i.teamId, new Set());
+        byTeam.get(i.teamId)!.add(i.tournamentId);
+      }
+      for (const [teamId, set] of byTeam) participation.set(teamId, set.size);
+    }
+  }
+
   // Distance ranking when a "near" city is given and resolvable.
   const origin = near ? geocodeCity(near, nearState) : null;
 
@@ -68,6 +95,7 @@ export async function GET(req: NextRequest) {
       isProvisional: t.rating?.isProvisional ?? true,
       hasApprovedClaim: t.claim?.status === "APPROVED",
       distanceMiles: distanceMiles == null ? null : Math.round(distanceMiles),
+      participations: participation.get(t.id) ?? 0,
     };
   });
 
