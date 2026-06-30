@@ -28,6 +28,21 @@ function gcUrl(gcTeamId: string): string {
   return `https://web.gc.com/teams/${gcTeamId}/schedule`;
 }
 
+/** Link to the team's own page on this site — to inspect its opponents here. */
+function NbrLink({ slug }: { slug: string }) {
+  return (
+    <a
+      href={`/teams/${slug}`}
+      target="_blank"
+      rel="noreferrer"
+      title="Open this team's NBR page"
+      className="inline-flex items-center gap-1 rounded-md bg-navy-700 px-2 py-0.5 text-xs font-bold text-white hover:bg-navy-600"
+    >
+      NBR ↗
+    </a>
+  );
+}
+
 /** Prominent GameChanger link, or a muted tag for ghosts that have no GC page. */
 function GcButton({ team }: { team: DupTeam }) {
   if (!team.gcTeamId)
@@ -152,9 +167,11 @@ function DupCard({ pair, onResolved }: { pair: DupPair; onResolved: (key: string
       <div className="flex flex-wrap items-center justify-between gap-2 bg-navy-900 px-4 py-2 text-sm text-white">
         <span className="flex flex-wrap items-center gap-2">
           <span className="font-semibold">{pair.a.name}</span>
+          <NbrLink slug={pair.a.slug} />
           <GcButton team={pair.a} />
           <span className="text-white/40">vs</span>
           <span className="font-semibold">{pair.b.name}</span>
+          <NbrLink slug={pair.b.slug} />
           <GcButton team={pair.b} />
         </span>
         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${style.chip}`}>
@@ -325,6 +342,7 @@ function TeamSide({ team, role }: { team: DupTeam; role: "Keep" | "Merge in" }) 
       </div>
       <p className="mt-2 flex flex-wrap items-center gap-2 font-semibold text-slate-800">
         {team.name}
+        <NbrLink slug={team.slug} />
         <GcButton team={team} />
       </p>
       <p className="text-xs text-slate-500">

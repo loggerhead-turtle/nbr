@@ -254,6 +254,7 @@ function scoresWithinTolerance(
 export interface DupTeam {
   id: string;
   name: string;
+  slug: string;
   city: string | null;
   state: string | null;
   ageGroup: string | null;
@@ -348,6 +349,7 @@ async function loadDupTeam(
   const team: DupTeam = {
     id: t.id,
     name: t.name,
+    slug: t.slug,
     city: t.city,
     state: t.state,
     ageGroup: t.ageGroup,
