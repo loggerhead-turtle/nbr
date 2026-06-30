@@ -24,6 +24,8 @@ import {
   isRatingAlgorithm,
   TIER_CUTOFFS_KEY,
   parseTierCutoffs,
+  RECONCILE_SNAPSHOT_KEY,
+  type ReconcileSnapshot,
 } from "@nbr/core";
 import { AGE_OFFSETS_KEY } from "./age-offset";
 import { LIVE_SEARCH_KEY } from "./site-settings";
@@ -694,6 +696,38 @@ export async function snoozeDuplicateAction(formData: FormData): Promise<void> {
  * DB that aren't on a team's live GameChanger page). Deletes by id — no
  * re-scrape — then recomputes since the game graph changed.
  */
+/**
+ * Prune the saved reconcile snapshot so the page reflects what's been resolved
+ * (the snapshot is a frozen capture; without this, deleted games/teams reappear
+ * on reload). Best-effort.
+ */
+async function pruneReconcileSnapshot(opts: {
+  deletedGameIds?: Set<string>;
+  removeTeamId?: string;
+}): Promise<void> {
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key: RECONCILE_SNAPSHOT_KEY } });
+    if (!row?.value) return;
+    const snap = JSON.parse(row.value) as ReconcileSnapshot;
+    if (opts.deletedGameIds) {
+      const gone = opts.deletedGameIds;
+      snap.withExtras = snap.withExtras
+        .map((t) => ({ ...t, extras: t.extras.filter((g) => !gone.has(g.gameId)) }))
+        .filter((t) => t.extras.length > 0);
+    }
+    if (opts.removeTeamId) {
+      snap.withExtras = snap.withExtras.filter((t) => t.teamId !== opts.removeTeamId);
+      snap.deadIds = snap.deadIds.filter((t) => t.teamId !== opts.removeTeamId);
+    }
+    await prisma.appSetting.update({
+      where: { key: RECONCILE_SNAPSHOT_KEY },
+      data: { value: JSON.stringify(snap) },
+    });
+  } catch {
+    // best-effort — the snapshot is just a cached view
+  }
+}
+
 export async function deletePhantomGamesAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const ids = String(formData.get("gameIds") ?? "")
@@ -704,6 +738,7 @@ export async function deletePhantomGamesAction(formData: FormData): Promise<void
   // No recompute here on purpose — when clearing phantoms across many teams you'd
   // otherwise kick a recompute job per click. Hit "Recompute" once when done.
   await prisma.game.deleteMany({ where: { id: { in: ids } } });
+  await pruneReconcileSnapshot({ deletedGameIds: new Set(ids) });
   revalidatePath("/admin/reconcile");
   revalidatePath("/");
 }
@@ -727,6 +762,7 @@ export async function clearTeamGcIdAction(formData: FormData): Promise<void> {
     where: { id: teamId },
     data: { gcTeamId: null, scrapeEnabled: false, isGhost: true },
   });
+  await pruneReconcileSnapshot({ removeTeamId: teamId });
   revalidatePath("/admin/reconcile");
   revalidatePath("/admin/ghosts");
   revalidatePath("/admin/duplicates");
