@@ -1,5 +1,5 @@
 import { prisma } from "@nbr/db";
-import { scoreMerge, normalizeTeamName, type MergeScore } from "@nbr/core";
+import { scoreMerge, normalizeTeamName, ageGroupFromName, type MergeScore } from "@nbr/core";
 
 /**
  * Normalization for duplicate detection. Unlike the scraper's opponent-matching
@@ -286,7 +286,9 @@ export interface DupOverlap {
 export type DupRecommendation =
   | { kind: "delete-safe"; deleteId: string; note: string }
   | { kind: "merge"; note: string }
-  | { kind: "review"; note: string };
+  | { kind: "review"; note: string }
+  /** Different stated ages — can't be a duplicate; shared games mean a bad merge. */
+  | { kind: "different-age"; note: string };
 
 export interface DupPair {
   a: DupTeam;
@@ -396,10 +398,42 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
       uniqueB: keepA >= 0 ? rbUnique : raUnique,
     };
 
+    const confidence = scoreMerge({
+      nameA: a.name,
+      nameB: b.name,
+      // Fall back to the age stated in the name when the DB column is unset, so a
+      // "… 14U" ghost/contaminated row is correctly read as U14 and never looks
+      // like a match for a U12. This is what makes the age hard-gate actually fire.
+      ageA: a.ageGroup ?? ageGroupFromName(a.name),
+      ageB: b.ageGroup ?? ageGroupFromName(b.name),
+      cityA: a.city,
+      cityB: b.city,
+      stateA: a.city ? a.state : null,
+      stateB: b.city ? b.state : null,
+      coachesA: a.coaches,
+      coachesB: b.coaches,
+      // Strict count — same opponent + date + identical score — is the strongest
+      // "same team" proof, so feed that (not date-only overlaps) to the scorer.
+      sharedGameCount: exact,
+      regionStatesA: a.regionStates,
+      regionStatesB: b.regionStates,
+    });
+
     // Two exact matches (opponent + date + score) is near-proof it's one team.
     const strong = exact >= 2;
     let recommendation: DupRecommendation;
-    if (strong && overlap.uniqueB === 0 && b.totalGames > 0) {
+    if (confidence.disqualified) {
+      // Different stated ages can't be the same team. If they nonetheless share
+      // games, that's the fingerprint of a bad cross-age merge (one row absorbed
+      // the other age's games) — route to the Bad merges page, never merge here.
+      recommendation = {
+        kind: "different-age",
+        note:
+          exact > 0
+            ? "Different ages — NOT a duplicate. The shared games come from a bad cross-age merge; fix it on the Bad merges page, don't merge these."
+            : "Different ages — not the same team.",
+      };
+    } else if (strong && overlap.uniqueB === 0 && b.totalGames > 0) {
       recommendation = {
         kind: "delete-safe",
         deleteId: b.id,
@@ -420,29 +454,14 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
       };
     }
 
-    const confidence = scoreMerge({
-      nameA: a.name,
-      nameB: b.name,
-      ageA: a.ageGroup,
-      ageB: b.ageGroup,
-      cityA: a.city,
-      cityB: b.city,
-      stateA: a.city ? a.state : null,
-      stateB: b.city ? b.state : null,
-      coachesA: a.coaches,
-      coachesB: b.coaches,
-      // Strict count — same opponent + date + identical score — is the strongest
-      // "same team" proof, so feed that (not date-only overlaps) to the scorer.
-      sharedGameCount: exact,
-      regionStatesA: a.regionStates,
-      regionStatesB: b.regionStates,
-    });
-
     out.push({ a, b, commonGames, confidence, overlap, recommendation });
   }
-  // Heat map: highest-confidence pairs first so the easy merges are up top.
+  // Real candidates first; different-age (disqualified) pairs sink to the bottom
+  // — they can never be merged here — then by confidence and shared-game count.
   return out.sort(
     (x, y) =>
-      y.confidence.score - x.confidence.score || y.commonGames.length - x.commonGames.length,
+      Number(x.confidence.disqualified) - Number(y.confidence.disqualified) ||
+      y.confidence.score - x.confidence.score ||
+      y.commonGames.length - x.commonGames.length,
   );
 }

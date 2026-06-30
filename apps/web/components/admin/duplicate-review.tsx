@@ -21,6 +21,7 @@ const REC_STYLE: Record<DupPair["recommendation"]["kind"], { box: string; label:
   "delete-safe": { box: "border-emerald-100 bg-emerald-50", label: "Safe to delete the duplicate" },
   merge: { box: "border-sky-100 bg-sky-50", label: "Merge to combine" },
   review: { box: "border-amber-100 bg-amber-50", label: "Needs a look" },
+  "different-age": { box: "border-rose-200 bg-rose-50", label: "Not a duplicate — different ages" },
 };
 
 function gcUrl(gcTeamId: string): string {
@@ -91,6 +92,7 @@ function DupCard({ pair, onResolved }: { pair: DupPair; onResolved: (key: string
   const conf = pair.confidence;
   const style = TIER_STYLE[conf.tier];
   const rec = pair.recommendation;
+  const disq = conf.disqualified; // different stated ages — can't be the same team
   const isBusy = pending || busy;
 
   const run = (fn: () => Promise<void>) => {
@@ -156,7 +158,7 @@ function DupCard({ pair, onResolved }: { pair: DupPair; onResolved: (key: string
           <GcButton team={pair.b} />
         </span>
         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${style.chip}`}>
-          {style.label} · {conf.score}%
+          {disq ? "Not a match" : `${style.label} · ${conf.score}%`}
         </span>
       </div>
 
@@ -257,17 +259,29 @@ function DupCard({ pair, onResolved }: { pair: DupPair; onResolved: (key: string
       </div>
 
       <div className="no-print flex flex-wrap gap-2 border-t border-slate-100 bg-slate-50 px-4 py-3">
-        <button onClick={onMerge} disabled={isBusy} className="btn-primary disabled:opacity-50">
-          ✓ Merge ({pair.b.name} → {pair.a.name})
-        </button>
-        {rec.kind === "delete-safe" && (
-          <button
-            onClick={() => onDelete(rec.deleteId)}
-            disabled={isBusy}
-            className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+        {disq ? (
+          // Different ages — merging is always wrong; send them to the fix instead.
+          <a
+            href="/admin/bad-merges?gap=1"
+            className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700"
           >
-            🗑 Delete duplicate ({pair.b.name})
-          </button>
+            🛠 Fix on Bad merges →
+          </a>
+        ) : (
+          <>
+            <button onClick={onMerge} disabled={isBusy} className="btn-primary disabled:opacity-50">
+              ✓ Merge ({pair.b.name} → {pair.a.name})
+            </button>
+            {rec.kind === "delete-safe" && (
+              <button
+                onClick={() => onDelete(rec.deleteId)}
+                disabled={isBusy}
+                className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+              >
+                🗑 Delete duplicate ({pair.b.name})
+              </button>
+            )}
+          </>
         )}
         <button onClick={onDismiss} disabled={isBusy} className="btn-ghost disabled:opacity-50">
           ✗ Not a duplicate

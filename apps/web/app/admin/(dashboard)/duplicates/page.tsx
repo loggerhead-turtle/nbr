@@ -38,6 +38,14 @@ export default async function DuplicatesPage() {
           it for a day so the next scrape can fill in more games, then resurfaces it. The scraper
           auto-merges only the near-certain matches; everything else lands here.
         </p>
+        <p>
+          <strong>Different ages are never a duplicate.</strong> If two records share a lot of games
+          but are different ages (e.g. a 12U and a 14U), that&rsquo;s the fingerprint of a{" "}
+          <em>bad cross-age merge</em> — one record absorbed the other age&rsquo;s games — not a real
+          match. Those are marked <span className="text-rose-700">Not a duplicate</span> and point you
+          to the <strong>Bad merges</strong> page to split them; merging is disabled. Fix the bad
+          merge there and the phantom shared games (and this false pairing) disappear.
+        </p>
       </div>
       <DuplicateReview initialPairs={pairs} />
     </div>
