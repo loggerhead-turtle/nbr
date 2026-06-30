@@ -112,6 +112,12 @@ function GhostCard({
         <span className="flex flex-wrap items-center gap-2 font-semibold">
           {ghost.name}
           <NbrLink slug={ghost.slug} />
+          <a
+            href={`/admin/ghosts/${ghost.id}`}
+            className="rounded-md bg-white/15 px-2 py-0.5 text-xs font-medium text-white hover:bg-white/25"
+          >
+            games &amp; origins →
+          </a>
         </span>
         <span className="flex items-center gap-2 text-xs">
           <span className="rounded-full bg-white/15 px-2 py-0.5">

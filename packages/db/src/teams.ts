@@ -908,3 +908,85 @@ export async function reassignTeamGames(
   if (moved > 0) await dedupeTeamGames(targetTeamId);
   return moved;
 }
+
+export interface GhostGameOrigin {
+  gameId: string;
+  date: string;
+  us: number | null;
+  them: number | null;
+  /** The opponent — i.e. the team whose schedule scrape created this ghost game. */
+  opponentId: string;
+  opponentName: string;
+  opponentSlug: string;
+  opponentGcTeamId: string | null;
+  opponentAge: string | null;
+  opponentIsGhost: boolean;
+}
+
+export interface GhostDetail {
+  id: string;
+  name: string;
+  slug: string;
+  ageGroup: string | null;
+  isGhost: boolean;
+  games: GhostGameOrigin[];
+}
+
+/**
+ * Full game list for one team, with each opponent resolved — for the ghost
+ * provenance view. A ghost has no page of its own, so every game here was created
+ * when the OPPONENT's schedule was scraped; the opponent is therefore the source.
+ */
+export async function getGhostDetail(teamId: string): Promise<GhostDetail | null> {
+  const oppSelect = {
+    select: { id: true, name: true, slug: true, gcTeamId: true, ageGroup: true, isGhost: true },
+  };
+  const t = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      ageGroup: true,
+      isGhost: true,
+      homeGames: {
+        where: { status: "FINAL" },
+        select: { id: true, playedAt: true, homeScore: true, awayScore: true, awayTeam: oppSelect },
+      },
+      awayGames: {
+        where: { status: "FINAL" },
+        select: { id: true, playedAt: true, homeScore: true, awayScore: true, homeTeam: oppSelect },
+      },
+    },
+  });
+  if (!t) return null;
+
+  const games: GhostGameOrigin[] = [
+    ...t.homeGames.map((g) => ({
+      gameId: g.id,
+      date: g.playedAt.toISOString().slice(0, 10),
+      us: g.homeScore,
+      them: g.awayScore,
+      opponentId: g.awayTeam.id,
+      opponentName: g.awayTeam.name,
+      opponentSlug: g.awayTeam.slug,
+      opponentGcTeamId: g.awayTeam.gcTeamId,
+      opponentAge: g.awayTeam.ageGroup,
+      opponentIsGhost: g.awayTeam.isGhost,
+    })),
+    ...t.awayGames.map((g) => ({
+      gameId: g.id,
+      date: g.playedAt.toISOString().slice(0, 10),
+      us: g.awayScore,
+      them: g.homeScore,
+      opponentId: g.homeTeam.id,
+      opponentName: g.homeTeam.name,
+      opponentSlug: g.homeTeam.slug,
+      opponentGcTeamId: g.homeTeam.gcTeamId,
+      opponentAge: g.homeTeam.ageGroup,
+      opponentIsGhost: g.homeTeam.isGhost,
+    })),
+  ].sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  return { id: t.id, name: t.name, slug: t.slug, ageGroup: t.ageGroup, isGhost: t.isGhost, games };
+}
