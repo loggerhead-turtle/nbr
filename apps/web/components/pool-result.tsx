@@ -24,10 +24,14 @@ function PoolCard({
   formatValue: (n: number) => string;
 }) {
   const posById = new Map(pool.teams.map((t, i) => [t.id, i + 1]));
+  // Older cached results (e.g. demo sessionStorage) may lack these fields.
+  const rematches = pool.rematches ?? [];
+  const pastGames = pool.pastGames ?? 0;
   const opponentsOf = (teamId: string) =>
-    pool.rematches
+    rematches
       .filter((r) => r.aId === teamId || r.bId === teamId)
-      .map((r) => ({ pos: posById.get(r.aId === teamId ? r.bId : r.aId)!, games: r.games }))
+      .map((r) => ({ pos: posById.get(r.aId === teamId ? r.bId : r.aId), games: r.games }))
+      .filter((o): o is { pos: number; games: number } => o.pos != null)
       .sort((a, b) => a.pos - b.pos);
 
   return (
@@ -35,12 +39,12 @@ function PoolCard({
       <div className="flex items-center justify-between bg-navy-900 px-4 py-2.5 text-white">
         <span className="font-bold">{pool.label}</span>
         <span className="flex items-center gap-2 text-xs text-navy-100">
-          {pool.pastGames > 0 && (
+          {pastGames > 0 && (
             <span
-              title={`${pool.pastGames} prior game(s) among these teams`}
+              title={`${pastGames} prior game(s) among these teams`}
               className="rounded-full bg-amber-400 px-2 py-0.5 font-bold text-amber-950"
             >
-              {pool.pastGames} rematch{pool.pastGames === 1 ? "" : "es"}
+              {pastGames} rematch{pastGames === 1 ? "" : "es"}
             </span>
           )}
           <span>Avg {formatValue(pool.averageRating)}</span>
@@ -107,7 +111,7 @@ export function PoolResultView({
             {result.numTeams} teams · {result.numPools} pools · Balance:{" "}
             <span className="font-semibold text-navy-800">{balanceQuality}</span> (±
             {Math.round(result.strengthSpread)} spread)
-            {result.rematchPairs > 0 && (
+            {(result.rematchPairs ?? 0) > 0 && (
               <>
                 {" · "}
                 <span className="font-semibold text-amber-700">
