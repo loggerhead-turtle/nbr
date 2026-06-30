@@ -16,11 +16,14 @@ export interface FindingVM {
   teamId: string;
   teamName: string;
   teamAge: number;
+  gcTeamId: string | null;
   ownCohortGames: number;
   outliers: OutlierVM[];
 }
 
 const GAP_OPTIONS = [1, 2, 3, 4, 5];
+
+const gcUrl = (id: string) => `https://web.gc.com/teams/${id}/schedule`;
 
 export function BadMergeReview({ findings, gap }: { findings: FindingVM[]; gap: number }) {
   const [done, setDone] = useState<Set<string>>(new Set());
@@ -92,8 +95,19 @@ export function BadMergeReview({ findings, gap }: { findings: FindingVM[]; gap: 
             return (
               <div key={f.teamId} className={`card overflow-hidden ${isBusy ? "opacity-50" : ""}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2 bg-navy-900 px-4 py-2 text-sm text-white">
-                  <span className="font-semibold">
+                  <span className="flex items-center gap-2 font-semibold">
                     {f.teamName} <span className="text-white/60">(U{f.teamAge})</span>
+                    {f.gcTeamId && (
+                      <a
+                        href={gcUrl(f.gcTeamId)}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={`Open ${f.teamName} on GameChanger`}
+                        className="rounded-md bg-sky-600 px-2 py-0.5 text-xs font-bold text-white hover:bg-sky-700"
+                      >
+                        GC ↗
+                      </a>
+                    )}
                   </span>
                   <span className="flex items-center gap-2 text-xs">
                     <span className="rounded-full bg-white/15 px-2 py-0.5">

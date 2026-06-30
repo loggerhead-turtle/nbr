@@ -21,6 +21,7 @@ export default async function BadMergesPage({
     teamId: f.teamId,
     teamName: f.teamName,
     teamAge: f.teamAge,
+    gcTeamId: f.gcTeamId,
     ownCohortGames: f.ownCohortGames,
     outliers: f.outliers.map((o) => ({
       gameId: o.gameId,

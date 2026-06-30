@@ -540,6 +540,7 @@ export interface BadMergeFinding {
   teamId: string;
   teamName: string;
   teamAge: number;
+  gcTeamId: string | null;
   /** Games within one age year of the team — its legitimate base. */
   ownCohortGames: number;
   outliers: BadMergeOutlier[];
@@ -567,6 +568,7 @@ export async function findCrossAgeMergeArtifacts(
       id: true,
       name: true,
       ageGroup: true,
+      gcTeamId: true,
       homeGames: {
         select: { id: true, playedAt: true, awayTeam: { select: { name: true, ageGroup: true } } },
       },
@@ -622,6 +624,7 @@ export async function findCrossAgeMergeArtifacts(
         teamId: t.id,
         teamName: t.name,
         teamAge,
+        gcTeamId: t.gcTeamId,
         ownCohortGames,
         outliers,
       });
