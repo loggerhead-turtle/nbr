@@ -689,6 +689,42 @@ export async function snoozeDuplicateAction(formData: FormData): Promise<void> {
   revalidatePath("/admin/duplicates");
 }
 
+/**
+ * Delete a set of phantom games surfaced by the reconcile capture (games in our
+ * DB that aren't on a team's live GameChanger page). Deletes by id — no
+ * re-scrape — then recomputes since the game graph changed.
+ */
+export async function deletePhantomGamesAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const ids = String(formData.get("gameIds") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (ids.length === 0) return;
+  await prisma.game.deleteMany({ where: { id: { in: ids } } });
+  await triggerRecompute();
+  revalidatePath("/admin/reconcile");
+  revalidatePath("/");
+}
+
+/**
+ * A team whose GameChanger id points at nothing online (dead id). Clear the id
+ * and turn it into a ghost so it stops being treated as a verified team and can
+ * be merged into the real team on the Ghosts/Duplicates page.
+ */
+export async function clearTeamGcIdAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const teamId = String(formData.get("teamId") ?? "");
+  if (!teamId) return;
+  await prisma.team.update({
+    where: { id: teamId },
+    data: { gcTeamId: null, scrapeEnabled: false, isGhost: true },
+  });
+  revalidatePath("/admin/reconcile");
+  revalidatePath("/admin/ghosts");
+  revalidatePath("/admin/duplicates");
+}
+
 export async function deleteTeamAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("teamId") ?? "");
