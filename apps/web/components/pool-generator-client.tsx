@@ -96,12 +96,23 @@ export function PoolGeneratorClient() {
     setCustomRating("1500");
   };
 
-  const generate = async (save: boolean) => {
+  // Re-pooling strategy weights (the buttons / hybrid slider). Balanced = default.
+  const [weights, setWeights] = useState<{
+    balanceWeight: number;
+    rematchWeight: number;
+    locationWeight: number;
+  }>({ balanceWeight: 1, rematchWeight: 0, locationWeight: 0 });
+
+  const generate = async (
+    save: boolean,
+    w?: { balanceWeight: number; rematchWeight: number; locationWeight: number },
+  ) => {
     setError(null);
     if (selected.length < numPools) {
       setError(`You need at least ${numPools} teams for ${numPools} pools.`);
       return;
     }
+    const wt = w ?? weights;
     setBusy(true);
     try {
       const res = await fetch(`/api/pools/generate${save ? "?save=1" : ""}`, {
@@ -110,6 +121,7 @@ export function PoolGeneratorClient() {
         body: JSON.stringify({
           name: name || undefined,
           numPools,
+          ...wt,
           teams: selected.map((s) => ({
             id: s.id,
             name: s.name,
@@ -133,6 +145,16 @@ export function PoolGeneratorClient() {
       setBusy(false);
     }
   };
+
+  // Apply a re-pooling strategy: set the weights and regenerate immediately.
+  const applyStrategy = (w: { balanceWeight: number; rematchWeight: number; locationWeight: number }) => {
+    setWeights(w);
+    void generate(false, w);
+  };
+  const [showSlider, setShowSlider] = useState(false);
+  const [hybrid, setHybrid] = useState(50);
+  const active = (w: { rematchWeight: number; locationWeight: number }) =>
+    weights.rematchWeight === w.rematchWeight && weights.locationWeight === w.locationWeight;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
@@ -293,6 +315,71 @@ export function PoolGeneratorClient() {
                   onFocus={(e) => e.currentTarget.select()}
                   className="input flex-1"
                 />
+              )}
+            </div>
+            <div className="no-print card mb-4 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-slate-500">Re-pool:</span>
+                <button
+                  onClick={() => applyStrategy({ balanceWeight: 1, rematchWeight: 0, locationWeight: 0 })}
+                  className={active({ rematchWeight: 0, locationWeight: 0 }) ? "btn-primary" : "btn-ghost"}
+                  disabled={busy}
+                >
+                  Balanced
+                </button>
+                <button
+                  onClick={() => applyStrategy({ balanceWeight: 0.3, rematchWeight: 1.5, locationWeight: 0 })}
+                  className={active({ rematchWeight: 1.5, locationWeight: 0 }) ? "btn-primary" : "btn-ghost"}
+                  disabled={busy}
+                >
+                  Minimize rematches
+                </button>
+                <button
+                  onClick={() => applyStrategy({ balanceWeight: 0.3, rematchWeight: 0.8, locationWeight: 1.5 })}
+                  className={active({ rematchWeight: 0.8, locationWeight: 1.5 }) ? "btn-primary" : "btn-ghost"}
+                  disabled={busy}
+                >
+                  Avoid same area
+                </button>
+                <button onClick={() => setShowSlider((s) => !s)} className="btn-ghost" disabled={busy}>
+                  Hybrid…
+                </button>
+              </div>
+              {showSlider && (
+                <div className="mt-3 max-w-md">
+                  <label htmlFor="hybrid" className="text-xs text-slate-500">
+                    Balanced pools ↔ Avoid rematches &amp; rematches by area
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      id="hybrid"
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={hybrid}
+                      onChange={(e) => setHybrid(Number(e.target.value))}
+                      className="w-full"
+                    />
+                    <button
+                      className="btn-primary shrink-0"
+                      disabled={busy}
+                      onClick={() => {
+                        const x = hybrid / 100;
+                        applyStrategy({
+                          balanceWeight: 1 - 0.7 * x,
+                          rematchWeight: 1.5 * x,
+                          locationWeight: 0.8 * x,
+                        });
+                      }}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    Left = even pool strength by seed; right = aggressively split prior opponents and
+                    same-area teams. Top seeds always stay in separate pools.
+                  </p>
+                </div>
               )}
             </div>
             <PoolResultView result={result} name={name} />

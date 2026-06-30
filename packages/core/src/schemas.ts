@@ -222,6 +222,10 @@ export type CreateGameInput = z.infer<typeof createGameSchema>;
 export const poolGenerateSchema = z.object({
   name: z.string().trim().max(120).optional(),
   numPools: z.coerce.number().int().min(1).max(256),
+  // Optional re-pooling objective weights (the buttons / hybrid slider).
+  balanceWeight: z.coerce.number().min(0).max(5).optional(),
+  rematchWeight: z.coerce.number().min(0).max(5).optional(),
+  locationWeight: z.coerce.number().min(0).max(5).optional(),
   teams: z
     .array(
       z.object({
