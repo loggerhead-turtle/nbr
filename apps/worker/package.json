@@ -7,6 +7,7 @@
     "scrape": "tsx src/index.ts scrape",
     "maxpreps": "tsx src/index.ts maxpreps",
     "geocode": "tsx src/index.ts geocode",
+    "reconcile": "tsx src/index.ts reconcile",
     "recompute": "tsx src/index.ts recompute",
     "backtest": "tsx src/index.ts backtest",
     "age-diagnostics": "tsx src/index.ts age-diagnostics",

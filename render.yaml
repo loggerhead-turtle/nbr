@@ -82,6 +82,20 @@ services:
     envVars:
       - fromGroup: nbr
 
+  # DB-vs-reality reconcile: re-fetches each team's GameChanger schedule and
+  # reports games we store that aren't on the team's own page (the phantom /
+  # mis-attributed games behind cross-age contamination). Report-only unless
+  # RECONCILE_APPLY=true. Needs Chromium → Docker. Trigger manually.
+  - type: cron
+    name: nbr-reconcile
+    runtime: docker
+    dockerfilePath: ./apps/worker/Dockerfile
+    dockerCommand: pnpm --filter @nbr/worker reconcile
+    schedule: "0 9 1 1 *" # 09:00 on Jan 1 (placeholder; trigger manually)
+    autoDeploy: false
+    envVars:
+      - fromGroup: nbr
+
   # Recompute needs no browser, so it runs on the plain Node runtime (no Docker).
   - type: cron
     name: nbr-recompute

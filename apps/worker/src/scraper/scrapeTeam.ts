@@ -273,19 +273,51 @@ async function upsertGame(teamId: string, g: ParsedGame): Promise<boolean> {
   return true;
 }
 
-/** Match an opponent name to an existing team, else auto-create a ghost team. */
+/** Numeric age from an AgeGroup value or name token ("U11" → 11), else null. */
+function ageNum(a?: string | null): number | null {
+  const m = a?.match(/\d{1,2}/);
+  return m ? Number(m[0]) : null;
+}
+
+/**
+ * Match an opponent name to an existing team, else auto-create a ghost team.
+ *
+ * Matching is AGE-AWARE on purpose. `normalizeTeamName` strips the age token, so
+ * "Bolts 11U" and "Bolts 12U" normalize identically — matching on name alone let
+ * an opponent listed at one age attach to a real team of another age, which is
+ * the root cause of cross-age contamination (an 11U "Bolts" game landing on the
+ * real Bolts 12U). So:
+ *   - if the opponent name states an age, only a SAME-age team matches; otherwise
+ *     we create a correctly-aged ghost rather than pollute a wrong-age team;
+ *   - if it states no age, we match only when unambiguous (exactly one same-name
+ *     team); with several (e.g. Bolts 11U and 12U) we make a ghost, not a guess.
+ * Erring toward a ghost is safe — ghosts get triaged on the Ghost-teams page and
+ * never corrupt a real team's record.
+ */
 async function resolveOpponent(rawName: string): Promise<string> {
   const normalized = normalizeTeamName(rawName);
+  const oppAge = ageNum(ageGroupFromName(rawName));
 
   // Cheap candidate fetch: teams whose name shares the first significant token.
   const firstToken = normalized.split(" ")[0] ?? normalized;
   const candidates = await prisma.team.findMany({
     where: { name: { contains: firstToken, mode: "insensitive" } },
-    select: { id: true, name: true },
+    select: { id: true, name: true, ageGroup: true },
     take: 50,
   });
-  const match = candidates.find((c) => normalizeTeamName(c.name) === normalized);
-  if (match) return match.id;
+  const sameName = candidates.filter((c) => normalizeTeamName(c.name) === normalized);
+
+  if (oppAge != null) {
+    // Opponent states an age — only ever match a team of that same age.
+    const match = sameName.find(
+      (c) => (ageNum(c.ageGroup) ?? ageNum(ageGroupFromName(c.name))) === oppAge,
+    );
+    if (match) return match.id;
+  } else if (sameName.length === 1) {
+    // No stated age and exactly one same-name team — unambiguous, so match it.
+    return sameName[0]!.id;
+  }
+  // (No age + multiple same-name teams ⇒ ambiguous ⇒ fall through to a ghost.)
 
   // Create a ghost team (unverified) so the game still contributes to ratings.
   let slug = teamSlug(rawName);
