@@ -756,3 +756,155 @@ export async function dedupeTeamGames(teamId: string): Promise<void> {
     await prisma.game.deleteMany({ where: { id: { in: toDelete } } });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ghost splitter — untangle a "junk-drawer" ghost that pooled games from more
+// than one real team (because opponents all wrote the same age-less name). We
+// group the ghost's games by the OPPONENT's age and suggest the same-name team
+// at that age, but the admin confirms each group's destination (so a legit
+// play-up isn't auto-misrouted).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface GhostSplitGame {
+  gameId: string;
+  opponent: string;
+  date: string;
+  us: number | null;
+  them: number | null;
+}
+
+export interface GhostSplitGroup {
+  /** Opponent age for this group (null = couldn't determine). */
+  oppAge: number | null;
+  label: string;
+  games: GhostSplitGame[];
+  /** Best same-name team at that age, if one exists (real preferred). */
+  suggestedTargetId: string | null;
+  suggestedTargetName: string | null;
+}
+
+/** Group a ghost's games by opponent age, with a suggested same-name target each. */
+export async function getGhostSplitGroups(ghostId: string): Promise<GhostSplitGroup[]> {
+  const g = await prisma.team.findUnique({
+    where: { id: ghostId },
+    select: {
+      name: true,
+      homeGames: {
+        where: { status: "FINAL" },
+        select: {
+          id: true,
+          playedAt: true,
+          homeScore: true,
+          awayScore: true,
+          awayTeam: { select: { name: true, ageGroup: true } },
+        },
+      },
+      awayGames: {
+        where: { status: "FINAL" },
+        select: {
+          id: true,
+          playedAt: true,
+          homeScore: true,
+          awayScore: true,
+          homeTeam: { select: { name: true, ageGroup: true } },
+        },
+      },
+    },
+  });
+  if (!g) return [];
+
+  const rows = [
+    ...g.homeGames.map((x) => ({
+      gameId: x.id,
+      date: x.playedAt.toISOString().slice(0, 10),
+      us: x.homeScore,
+      them: x.awayScore,
+      oppName: x.awayTeam.name,
+      oppAge: x.awayTeam.ageGroup,
+    })),
+    ...g.awayGames.map((x) => ({
+      gameId: x.id,
+      date: x.playedAt.toISOString().slice(0, 10),
+      us: x.awayScore,
+      them: x.homeScore,
+      oppName: x.homeTeam.name,
+      oppAge: x.homeTeam.ageGroup,
+    })),
+  ];
+
+  const byAge = new Map<number | null, GhostSplitGame[]>();
+  for (const r of rows) {
+    const age = ageToNum(r.oppAge ?? ageGroupFromName(r.oppName));
+    const list = byAge.get(age) ?? byAge.set(age, []).get(age)!;
+    list.push({ gameId: r.gameId, opponent: r.oppName, date: r.date, us: r.us, them: r.them });
+  }
+
+  const base = normalizeTeamName(g.name);
+  const firstToken = base.split(" ")[0] ?? base;
+  const sameName = base
+    ? await prisma.team.findMany({
+        where: { id: { not: ghostId }, name: { contains: firstToken, mode: "insensitive" } },
+        select: { id: true, name: true, ageGroup: true, gcTeamId: true },
+        take: 50,
+      })
+    : [];
+
+  const groups: GhostSplitGroup[] = [];
+  for (const [oppAge, games] of byAge) {
+    let suggestedTargetId: string | null = null;
+    let suggestedTargetName: string | null = null;
+    if (oppAge != null) {
+      const matches = sameName.filter(
+        (c) =>
+          normalizeTeamName(c.name) === base &&
+          ageToNum(c.ageGroup ?? ageGroupFromName(c.name)) === oppAge,
+      );
+      const best = matches.find((c) => c.gcTeamId) ?? matches[0];
+      if (best) {
+        suggestedTargetId = best.id;
+        suggestedTargetName = best.name;
+      }
+    }
+    groups.push({
+      oppAge,
+      label: oppAge != null ? `U${oppAge}` : "Unknown age",
+      games,
+      suggestedTargetId,
+      suggestedTargetName,
+    });
+  }
+  groups.sort((a, b) => (a.oppAge ?? 99) - (b.oppAge ?? 99));
+  return groups;
+}
+
+/**
+ * Reassign specific games from one team to another (used by the ghost splitter):
+ * for each game, the side that referenced `sourceTeamId` is pointed at
+ * `targetTeamId`, then the target is deduped. Returns how many games moved.
+ */
+export async function reassignTeamGames(
+  sourceTeamId: string,
+  gameIds: string[],
+  targetTeamId: string,
+): Promise<number> {
+  if (!sourceTeamId || !targetTeamId || sourceTeamId === targetTeamId || gameIds.length === 0) {
+    return 0;
+  }
+  const games = await prisma.game.findMany({
+    where: {
+      id: { in: gameIds },
+      OR: [{ homeTeamId: sourceTeamId }, { awayTeamId: sourceTeamId }],
+    },
+    select: { id: true, homeTeamId: true },
+  });
+  let moved = 0;
+  for (const g of games) {
+    await prisma.game.update({
+      where: { id: g.id },
+      data: g.homeTeamId === sourceTeamId ? { homeTeamId: targetTeamId } : { awayTeamId: targetTeamId },
+    });
+    moved += 1;
+  }
+  if (moved > 0) await dedupeTeamGames(targetTeamId);
+  return moved;
+}
