@@ -229,18 +229,18 @@ export function buildDemoStore(): DemoStore {
   });
   // Eight age groups; 10U and 12U each split into two NBR levels (two events in one).
   const t1Divs: TdDivision[] = [
-    division("U8", "NBR I", 145, 170),
-    division("U9", "NBR I", 145, 172),
-    division("U10", "NBR I", 162, 185),
-    division("U10", "NBR II", 142, 161),
-    division("U11", "NBR I", 150, 178),
-    division("U12", "NBR I", 165, 188),
-    division("U12", "NBR II", 144, 164),
-    division("U13", "NBR I", 152, 180),
+    division("U8", "Majors", 145, 170),
+    division("U9", "Majors", 145, 172),
+    division("U10", "Majors", 162, 185),
+    division("U10", "AAA", 142, 161),
+    division("U11", "Majors", 150, 178),
+    division("U12", "Majors", 165, 188),
+    division("U12", "AAA", 144, 164),
+    division("U13", "Majors", 152, 180),
   ];
   t1.divisions = t1Divs;
   for (const d of t1Divs) {
-    const isTopLevel = d.nbrLevel === "NBR I";
+    const isTopLevel = d.nbrLevel === "Majors";
     const base = isTopLevel ? 1740 : 1520;
     const invites = makeTeamInvites(d.id, d.ageGroup, isTopLevel ? 8 : 6, base, 220, ALL_PAY);
     t1.invites.push(...invites);
@@ -339,9 +339,9 @@ export function buildDemoStore(): DemoStore {
     fields: buildFields(),
   });
   const t2Divs = [
-    division("U11", "NBR I", 155, 182),
-    division("U14", "NBR I", 156, 184),
-    division("U14", "NBR II", 143, 161),
+    division("U11", "Majors", 155, 182),
+    division("U14", "Majors", 156, 184),
+    division("U14", "AAA", 143, 161),
   ];
   t2.divisions = t2Divs;
   t2.invites.push(...makeTeamInvites(t2Divs[0]!.id, "U11", 6, 1700, 230, ["PAID", "DEPOSIT_PAID", "INVITED", "PENCILED"]));
@@ -360,7 +360,7 @@ export function buildDemoStore(): DemoStore {
       id: sid("msg"),
       inviteId: t2.invites[0]!.id,
       teamName: t2.invites[0]!.team.name,
-      body: "Got it, thank you! You're penciled into the 11U NBR I bracket.",
+      body: "Got it, thank you! You're penciled into the 11U Majors bracket.",
       fromDirector: true,
       createdAt: new Date(Date.now() - 1.5 * 36e5).toISOString(),
     },

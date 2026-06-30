@@ -61,7 +61,7 @@ function DivisionPools({ divisionId }: { divisionId: string }) {
                   onChange={(e) => setNumPools(Number(e.target.value))}
                   className="input w-20"
                 >
-                  {Array.from({ length: Math.max(1, teamCount - 1) }, (_, i) => i + 2).map((n) => (
+                  {Array.from({ length: teamCount }, (_, i) => i + 1).map((n) => (
                     <option key={n} value={n}>{n}</option>
                   ))}
                 </select>

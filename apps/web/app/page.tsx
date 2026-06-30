@@ -4,6 +4,7 @@ import { ageGroupLabel } from "@/lib/format";
 import { ScrimmageFinderCard } from "@/components/scrimmage-finder-card";
 import { RatingsFilterBar } from "@/components/ratings-filter-bar";
 import { RatingsTable } from "@/components/ratings-table";
+import { TierLegend } from "@/components/tier-badge";
 import { getLiveSearchEnabled } from "@/lib/site-settings";
 import { AGE_GROUPS, CLASSIFICATIONS } from "@nbr/core";
 
@@ -100,6 +101,8 @@ export default async function HomePage({
           {" · "}
           <span className="text-slate-400">Sorted by {SORT_LABELS[sort]} ({DIR_LABEL[dir]})</span>
         </p>
+
+        {rows.some((r) => r.tier) && <TierLegend className="mb-3" />}
 
         {rows.length === 0 ? <EmptyState /> : <RatingsTable rows={rows} sort={sort} dir={dir} sp={sp} />}
 

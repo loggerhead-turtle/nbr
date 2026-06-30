@@ -1,4 +1,12 @@
 import { prisma, Prisma } from "@nbr/db";
+import {
+  type NbrTier,
+  TIER_CUTOFFS_KEY,
+  parseTierCutoffs,
+  percentileOf,
+  tierForPercentile,
+  MIN_TEAMS_FOR_TIERS,
+} from "@nbr/core";
 
 export interface RatingRow {
   teamId: string;
@@ -17,6 +25,8 @@ export interface RatingRow {
   losses: number;
   ties: number;
   isProvisional: boolean;
+  /** Competitive tier (within division), null if provisional or too few teams. */
+  tier: NbrTier | null;
 }
 
 export interface RatingsQuery {
@@ -72,6 +82,32 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
         : { rating: { rating: dir } };
 
   try {
+    // Build a within-division tier classifier from the established-team rating
+    // distribution (only for a single age/varsity division — tiers are relative
+    // to peers of the same age, not across the unified cross-age scale).
+    let tierFor: (rating: number, provisional: boolean) => NbrTier | null = () => null;
+    if (q.ageGroup || q.classification) {
+      const distWhere: Prisma.TeamWhereInput = {
+        isActive: true,
+        isGhost: false,
+        rating: { is: { isProvisional: false } },
+      };
+      if (q.ageGroup) distWhere.ageGroup = q.ageGroup as Prisma.TeamWhereInput["ageGroup"];
+      else distWhere.classification = q.classification;
+      const [cutoffRow, dist] = await Promise.all([
+        prisma.appSetting.findUnique({ where: { key: TIER_CUTOFFS_KEY } }),
+        prisma.team.findMany({ where: distWhere, select: { rating: { select: { rating: true } } } }),
+      ]);
+      const cutoffs = parseTierCutoffs(cutoffRow?.value);
+      const ratings = dist
+        .map((t) => t.rating?.rating)
+        .filter((r): r is number => r != null);
+      if (ratings.length >= MIN_TEAMS_FOR_TIERS) {
+        tierFor = (rating, provisional) =>
+          provisional ? null : tierForPercentile(percentileOf(rating, ratings), cutoffs);
+      }
+    }
+
     const [teams, total] = await Promise.all([
       prisma.team.findMany({
         where,
@@ -102,6 +138,7 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
         losses: t.rating!.losses,
         ties: t.rating!.ties,
         isProvisional: t.rating!.isProvisional,
+        tier: tierFor(t.rating!.rating, t.rating!.isProvisional),
       }));
 
     return { rows, total };

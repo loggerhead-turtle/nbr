@@ -219,11 +219,11 @@ export function PoolGeneratorClient() {
           <input
             id="pools"
             type="number"
-            min={2}
-            max={16}
+            min={1}
+            max={256}
             className="input w-28"
             value={numPools}
-            onChange={(e) => setNumPools(Math.max(2, Math.min(16, Number(e.target.value) || 2)))}
+            onChange={(e) => setNumPools(Math.max(1, Math.min(256, Number(e.target.value) || 1)))}
           />
           <p className="mt-2 text-xs text-slate-500">
             {selected.length} team{selected.length === 1 ? "" : "s"} selected.

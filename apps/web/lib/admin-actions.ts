@@ -21,6 +21,8 @@ import {
   geocodeCity,
   normalizeWebsiteUrl,
   isRatingAlgorithm,
+  TIER_CUTOFFS_KEY,
+  parseTierCutoffs,
 } from "@nbr/core";
 import { AGE_OFFSETS_KEY } from "./age-offset";
 import { LIVE_SEARCH_KEY } from "./site-settings";
@@ -433,6 +435,26 @@ export async function setLiveSearchAction(formData: FormData): Promise<void> {
 }
 
 /** Save the admin-tunable cross-age rating offset (points per age year). */
+export async function setTierCutoffsAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  // Percentile lower-bounds for AA / AAA / Majors (A is below AA). parseTierCutoffs
+  // clamps to 0–100 and keeps them ordered.
+  const cutoffs = parseTierCutoffs(
+    JSON.stringify({
+      AA: Number(formData.get("AA")),
+      AAA: Number(formData.get("AAA")),
+      Majors: Number(formData.get("Majors")),
+    }),
+  );
+  await prisma.appSetting.upsert({
+    where: { key: TIER_CUTOFFS_KEY },
+    create: { key: TIER_CUTOFFS_KEY, value: JSON.stringify(cutoffs) },
+    update: { value: JSON.stringify(cutoffs) },
+  });
+  revalidatePath("/admin/tiers");
+  revalidatePath("/");
+}
+
 export async function setAgeOffsetsAction(formData: FormData): Promise<void> {
   await requireAdmin();
   // One numeric field per age group (name="offset_U12"), points relative to 14U=0.
