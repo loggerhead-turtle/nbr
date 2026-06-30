@@ -172,9 +172,14 @@ function DupCard({ pair, onResolved }: { pair: DupPair; onResolved: (key: string
           <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800">
             {pair.overlap.exact} exact
           </span>
+          {pair.overlap.close - pair.overlap.exact > 0 && (
+            <span className="rounded bg-lime-100 px-1.5 py-0.5 font-medium text-lime-800">
+              {pair.overlap.close - pair.overlap.exact} ~close
+            </span>
+          )}
           {pair.overlap.diffScore > 0 && (
             <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">
-              {pair.overlap.diffScore} diff-score
+              {pair.overlap.diffScore} differ
             </span>
           )}
           <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">
@@ -224,7 +229,7 @@ function DupCard({ pair, onResolved }: { pair: DupPair; onResolved: (key: string
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {pair.commonGames.map((g, i) => (
-                  <tr key={i} className={g.scoresMatch ? "" : "bg-amber-50"}>
+                  <tr key={i} className={g.scoresClose ? "" : "bg-amber-50"}>
                     <td className="px-3 py-1.5 text-slate-600">
                       {g.date} · vs {g.opponent}
                     </td>
@@ -236,9 +241,15 @@ function DupCard({ pair, onResolved }: { pair: DupPair; onResolved: (key: string
                     </td>
                     <td
                       className="px-2 py-1.5 text-center"
-                      title={g.scoresMatch ? "scores match" : "scores differ"}
+                      title={
+                        g.scoresMatch
+                          ? "scores match"
+                          : g.scoresClose
+                            ? "scores within a couple runs — treated as the same game"
+                            : "scores differ"
+                      }
                     >
-                      {g.scoresMatch ? "✅" : "⚠️"}
+                      {g.scoresMatch ? "✅" : g.scoresClose ? "≈" : "⚠️"}
                     </td>
                   </tr>
                 ))}
@@ -248,8 +259,8 @@ function DupCard({ pair, onResolved }: { pair: DupPair; onResolved: (key: string
         )}
         <p className="mt-1.5 text-xs text-slate-400">
           Each column shows that row’s own recorded score. “{pair.a.name}” is {provenance(pair.a)};
-          “{pair.b.name}” is {provenance(pair.b)}. A ⚠️ means the same game was recorded with
-          different scores (often one side’s typo).
+          “{pair.b.name}” is {provenance(pair.b)}. ✅ = identical, ≈ = within a couple runs (treated
+          as the same game — scoring typo), ⚠️ = scores differ more.
         </p>
       </div>
 

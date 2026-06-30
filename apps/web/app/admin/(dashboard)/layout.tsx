@@ -61,6 +61,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Audit
           </Link>
           <Link
+            href="/admin/reconcile"
+            className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Reconcile
+          </Link>
+          <Link
             href="/admin/duplicates"
             className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
           >

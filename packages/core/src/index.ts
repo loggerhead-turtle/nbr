@@ -2,6 +2,7 @@ export * from "./geo";
 export * from "./links";
 export * from "./merge-confidence";
 export * from "./pool-generator";
+export * from "./reconcile";
 export * from "./schemas";
 export * from "./slug";
 export * from "./tournament-schedule";

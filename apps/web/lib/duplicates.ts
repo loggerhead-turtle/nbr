@@ -102,8 +102,10 @@ async function scanCandidates() {
     const day = g.playedAt.toISOString().slice(0, 10);
     const home = oppName.get(g.homeTeamId) ?? "";
     const away = oppName.get(g.awayTeamId) ?? "";
-    add(`${away}|${day}|${g.homeScore}-${g.awayScore}`, g.homeTeamId);
-    add(`${home}|${day}|${g.awayScore}-${g.homeScore}`, g.awayTeamId);
+    // Key on opponent name + date only (NOT score), so the same game still groups
+    // two rows even when one recorded a slightly different score.
+    add(`${away}|${day}`, g.homeTeamId);
+    add(`${home}|${day}`, g.awayTeamId);
   }
   for (const bucket of matchup.values()) {
     const uniq = [...new Set(bucket)];
@@ -134,9 +136,10 @@ async function scanCandidates() {
     }
   }
 
-  // Add shared-game pairs with 2+ co-occurrences.
+  // Add shared-game pairs: 3+ games against the same opponent on the same date is
+  // near-proof of the same team (scores are checked for closeness later).
   for (const [k, score] of pairScores) {
-    if (score >= 2) candidates.add(k);
+    if (score >= 3) candidates.add(k);
   }
 
   return { candidates, pairScores, dismissed };
@@ -246,7 +249,23 @@ export interface SharedGame {
   aThem: number | null;
   bUs: number | null;
   bThem: number | null;
+  /** Scores identical on both rows. */
   scoresMatch: boolean;
+  /** Scores within a small tolerance (allows for scoring typos). Includes exact. */
+  scoresClose: boolean;
+}
+
+/** Two score lines are "close" if they differ by at most this many total runs. */
+const SCORE_TOLERANCE = 2;
+
+function scoresWithinTolerance(
+  aUs: number | null,
+  aThem: number | null,
+  bUs: number | null,
+  bThem: number | null,
+): boolean {
+  if (aUs == null || aThem == null || bUs == null || bThem == null) return false;
+  return Math.abs(aUs - bUs) + Math.abs(aThem - bThem) <= SCORE_TOLERANCE;
 }
 
 export interface DupTeam {
@@ -269,7 +288,9 @@ export interface DupTeam {
 export interface DupOverlap {
   /** Same opponent + date + identical score on both rows (strongest proof). */
   exact: number;
-  /** Same opponent + date but the score differs (same game, scraped twice). */
+  /** Same opponent + date with scores within tolerance (includes exact). */
+  close: number;
+  /** Same opponent + date but the score differs beyond tolerance. */
   diffScore: number;
   /** Games only the kept row (a) has. */
   uniqueA: number;
@@ -377,6 +398,7 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
         bUs: bg.us,
         bThem: bg.them,
         scoresMatch: ag.us === bg.us && ag.them === bg.them,
+        scoresClose: scoresWithinTolerance(ag.us, ag.them, bg.us, bg.them),
       });
     }
 
@@ -385,14 +407,16 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
     const a = keepA >= 0 ? ra.team : rb.team;
     const b = keepA >= 0 ? rb.team : ra.team;
 
-    // Game-overlap breakdown. commonGames.length = keys present on both rows;
-    // the rest of each row's keys are that row's unique games.
+    // Game-overlap breakdown. commonGames.length = keys present on both rows
+    // (same opponent + date); the rest of each row's keys are unique games.
     const exact = commonGames.filter((g) => g.scoresMatch).length;
-    const diffScore = commonGames.length - exact;
+    const close = commonGames.filter((g) => g.scoresClose).length; // includes exact
+    const diffScore = commonGames.length - close;
     const raUnique = ra.byKey.size - commonGames.length;
     const rbUnique = rb.byKey.size - commonGames.length;
     const overlap: DupOverlap = {
       exact,
+      close,
       diffScore,
       uniqueA: keepA >= 0 ? raUnique : rbUnique,
       uniqueB: keepA >= 0 ? rbUnique : raUnique,
@@ -412,15 +436,17 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
       stateB: b.city ? b.state : null,
       coachesA: a.coaches,
       coachesB: b.coaches,
-      // Strict count — same opponent + date + identical score — is the strongest
-      // "same team" proof, so feed that (not date-only overlaps) to the scorer.
-      sharedGameCount: exact,
+      // Closely-matching games (same opponent + date, score within tolerance) are
+      // the "same team" proof, so feed that count to the scorer.
+      sharedGameCount: close,
       regionStatesA: a.regionStates,
       regionStatesB: b.regionStates,
     });
 
-    // Two exact matches (opponent + date + score) is near-proof it's one team.
-    const strong = exact >= 2;
+    // 3+ closely-matching games (same opponent + date, score within tolerance) is
+    // near-proof it's one team — slight score differences are treated as the same
+    // game (scoring typos), per the matching spec.
+    const strong = close >= 3;
     let recommendation: DupRecommendation;
     if (confidence.disqualified) {
       // Different stated ages can't be the same team. If they nonetheless share
@@ -429,7 +455,7 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
       recommendation = {
         kind: "different-age",
         note:
-          exact > 0
+          close > 0
             ? "Different ages — NOT a duplicate. The shared games come from a bad cross-age merge; fix it on the Bad merges page, don't merge these."
             : "Different ages — not the same team.",
       };
@@ -437,20 +463,20 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
       recommendation = {
         kind: "delete-safe",
         deleteId: b.id,
-        note: `Every game on “${b.name}” already exists on “${a.name}” — deleting it loses nothing.`,
+        note: `All ${close} of “${b.name}”’s games are already on “${a.name}” — deleting it loses nothing.`,
       };
     } else if (strong) {
       recommendation = {
         kind: "merge",
-        note: `Both rows have games the other lacks — merge to combine them (no game is lost).`,
+        note: `${close} closely-matching shared games — almost certainly the same team. Merge fully combines them.`,
       };
     } else {
       recommendation = {
         kind: "review",
         note:
-          exact === 0
-            ? `No exact game matches — check the games below before acting.`
-            : `Only 1 exact game match — could be a tournament coincidence. Check the games below.`,
+          close === 0
+            ? `No closely-matching shared games — verify before acting.`
+            : `Only ${close} closely-matching shared game${close === 1 ? "" : "s"} — need 3+ to be confident. Check below.`,
       };
     }
 
