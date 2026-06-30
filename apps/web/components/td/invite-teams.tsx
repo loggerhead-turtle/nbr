@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useTransition, useEffect, useCallback } from "react";
-import { inviteTeamAction } from "@/lib/tournament-actions";
+import { inviteTeamAction, inviteTeamsAction } from "@/lib/tournament-actions";
 import { TeamMedallion } from "@/components/team-medallion";
 import { formatRating } from "@/lib/format";
 
@@ -13,6 +13,8 @@ interface Hit {
   rating: number | null;
   hasApprovedClaim: boolean;
   distanceMiles: number | null;
+  /** How many of this director's tournaments the team has attended (any age). */
+  participations: number;
 }
 
 /** `excluded` maps teamId -> status so already-in/declined teams can't be re-invited. */
@@ -46,6 +48,7 @@ export function InviteTeams({
         if (ratingMin.trim()) params.set("ratingMin", ratingMin.trim());
         if (ratingMax.trim()) params.set("ratingMax", ratingMax.trim());
         if (near.trim()) params.set("near", near.trim());
+        params.set("tournamentId", tournamentId);
         const res = await fetch(`/api/teams/search?${params.toString()}`);
         const data = await res.json();
         setHits(data.teams ?? []);
@@ -53,7 +56,7 @@ export function InviteTeams({
         setHits([]);
       }
     }, 250);
-  }, [query, ratingMin, ratingMax, near]);
+  }, [query, ratingMin, ratingMax, near, tournamentId]);
 
   useEffect(() => {
     run();
@@ -66,6 +69,27 @@ export function InviteTeams({
     startTransition(async () => {
       await inviteTeamAction(fd);
       setInvited((s) => new Set(s).add(teamId));
+    });
+  };
+
+  // Teams shown that can still be invited (not already invited/accepted/declined).
+  const invitable = hits.filter((h) => !excluded[h.id] && !invited.has(h.id));
+  // "Invite all" is offered only once an NBR range is set (so it targets a band).
+  const hasRange = ratingMin.trim() !== "" || ratingMax.trim() !== "";
+
+  const inviteAll = () => {
+    const ids = invitable.map((h) => h.id);
+    if (ids.length === 0) return;
+    const fd = new FormData();
+    fd.set("tournamentId", tournamentId);
+    fd.set("teamIds", JSON.stringify(ids));
+    startTransition(async () => {
+      await inviteTeamsAction(fd);
+      setInvited((s) => {
+        const n = new Set(s);
+        ids.forEach((id) => n.add(id));
+        return n;
+      });
     });
   };
 
@@ -116,6 +140,16 @@ export function InviteTeams({
         Search by name and/or a rating range. Add a city to sort by distance.
       </p>
 
+      {hasRange && invitable.length > 0 && (
+        <button
+          onClick={inviteAll}
+          disabled={pending}
+          className="btn-primary mt-2 w-full disabled:opacity-50"
+        >
+          Invite all {invitable.length} in this NBR range
+        </button>
+      )}
+
       {hits.length > 0 && (
         <ul className="mt-2 max-h-80 divide-y divide-slate-100 overflow-auto rounded-lg border border-slate-200">
           {hits.map((h) => {
@@ -130,6 +164,14 @@ export function InviteTeams({
                   {h.rating != null && <span className="tabular-nums text-navy-700">{formatRating(h.rating)}</span>}
                   {h.distanceMiles != null && (
                     <span className="text-xs text-slate-400">~{h.distanceMiles} mi</span>
+                  )}
+                  {h.participations > 0 && (
+                    <span
+                      title={`Played in ${h.participations} of your past tournaments`}
+                      className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-navy-100 px-1 text-[10px] font-bold text-navy-800"
+                    >
+                      {h.participations}
+                    </span>
                   )}
                 </span>
                 {status === "DECLINED" ? (
