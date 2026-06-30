@@ -278,8 +278,18 @@ export class SessionTdPort implements TdDataPort {
         isProvisional: i.team.isProvisional,
       }));
     if (teams.length < 2) return;
-    const pools = Math.min(Math.max(2, numPools), teams.length);
-    div.pools = generatePools(teams, pools);
+    const pools = Math.min(Math.max(1, numPools), teams.length);
+    // Read-only pull of REAL head-to-head history from the live DB so the demo
+    // flags genuine rematches. Nothing is ever written back.
+    let pastGames: Record<string, number> = {};
+    try {
+      const ids = teams.map((t) => t.id).join(",");
+      const res = await fetch(`/api/teams/head-to-head?ids=${encodeURIComponent(ids)}`);
+      if (res.ok) pastGames = (await res.json()).pastGames ?? {};
+    } catch {
+      // offline / no DB — fall back to no rematch data
+    }
+    div.pools = generatePools(teams, pools, { pastGames });
     div.bracket = null; // pools changed — invalidate any prior bracket
     this.persist();
   }

@@ -80,7 +80,7 @@ export interface PoolOptions {
   rematchWeight?: number;
   /** >0 ⇒ avoid putting geographically close teams in the same pool. */
   locationWeight?: number;
-  /** Teams within this many miles count as "same area" (default 60). */
+  /** Teams within this many miles count as "same area" (default 20). */
   proximityMiles?: number;
 }
 
@@ -235,7 +235,7 @@ export function generatePools(
     balanceWeight: options.balanceWeight ?? 1,
     rematchWeight: options.rematchWeight ?? 0,
     locationWeight: options.locationWeight ?? 0,
-    proximityMiles: options.proximityMiles ?? 60,
+    proximityMiles: options.proximityMiles ?? 20,
   };
 
   if (numPools < 1) throw new Error("numPools must be at least 1");
