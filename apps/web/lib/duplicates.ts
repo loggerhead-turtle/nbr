@@ -28,37 +28,11 @@ function pairKey(a: string, b: string): [string, string] {
   return a < b ? [a, b] : [b, a];
 }
 
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  if (!m) return n;
-  if (!n) return m;
-  const dp = Array.from({ length: n + 1 }, (_, i) => i);
-  for (let i = 1; i <= m; i++) {
-    let prev = dp[0]!;
-    dp[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const tmp = dp[j]!;
-      dp[j] = Math.min(
-        dp[j]! + 1,
-        dp[j - 1]! + 1,
-        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      prev = tmp;
-    }
-  }
-  return dp[n]!;
+/** Numeric age from an AgeGroup value or name token ("U11" → 11), else null. */
+function ageNumOf(a: string | null | undefined): number | null {
+  const m = a?.match(/\d{1,2}/);
+  return m ? Number(m[0]) : null;
 }
-
-function nameSimilarity(a: string, b: string): number {
-  if (!a || !b) return 0;
-  if (a === b) return 1;
-  const dist = levenshtein(a, b);
-  return 1 - dist / Math.max(a.length, b.length);
-}
-
-const SIM_THRESHOLD = 0.72;
-const MAX_FUZZY_COMPARISONS = 200000;
 
 /**
  * One pass over teams + games to find candidate duplicate pairs and how many
@@ -67,7 +41,7 @@ const MAX_FUZZY_COMPARISONS = 200000;
  */
 async function scanCandidates() {
   const [teams, games, dismissals] = await Promise.all([
-    prisma.team.findMany({ select: { id: true, name: true } }),
+    prisma.team.findMany({ select: { id: true, name: true, ageGroup: true } }),
     prisma.game.findMany({
       where: { status: "FINAL", homeScore: { not: null }, awayScore: { not: null } },
       select: { homeTeamId: true, awayTeamId: true, playedAt: true, homeScore: true, awayScore: true },
@@ -113,33 +87,42 @@ async function scanCandidates() {
       for (let j = i + 1; j < uniq.length; j++) bump(uniq[i]!, uniq[j]!);
   }
 
+  // Age per team (column, else from the name) for the same-age gate below.
+  const ageOf = new Map(
+    teams.map((t) => [t.id, ageNumOf(t.ageGroup ?? ageGroupFromName(t.name))] as const),
+  );
+  // Same age, or one side's age unknown. Different stated ages are never a
+  // duplicate (that's contamination — handled on the Bad merges page), so they
+  // never become candidates here.
+  const ageCompatible = (a: string, b: string): boolean => {
+    const x = ageOf.get(a) ?? null;
+    const y = ageOf.get(b) ?? null;
+    return x == null || y == null || x === y;
+  };
+
   const candidates = new Set<string>();
 
-  // Signals 1 & 2: name match, within first-token buckets for efficiency.
-  const buckets = new Map<string, string[]>();
+  // Signal 1: exact same normalized name (age token kept) — the real team + a
+  // ghost twin. Group by full normalized name; every pair in a group is an exact
+  // match. (Fuzzy "looks similar" name matching is intentionally dropped — it
+  // flagged thousands of distinct same-prefix teams as duplicates.)
+  const byNorm = new Map<string, string[]>();
   for (const t of teams) {
-    const key = (norm.get(t.id) ?? "").split(" ")[0] ?? "";
-    if (!key) continue;
-    (buckets.get(key) ?? buckets.set(key, []).get(key)!).push(t.id);
+    const n = norm.get(t.id) ?? "";
+    if (n) (byNorm.get(n) ?? byNorm.set(n, []).get(n)!).push(t.id);
   }
-  let comparisons = 0;
-  for (const ids of buckets.values()) {
-    for (let i = 0; i < ids.length; i++) {
-      for (let j = i + 1; j < ids.length; j++) {
-        if (comparisons++ > MAX_FUZZY_COMPARISONS) break;
-        const na = norm.get(ids[i]!) ?? "";
-        const nb = norm.get(ids[j]!) ?? "";
-        if (na === nb || nameSimilarity(na, nb) >= SIM_THRESHOLD) {
-          candidates.add(`${pairKey(ids[i]!, ids[j]!).join("|")}`);
-        }
-      }
-    }
+  for (const ids of byNorm.values()) {
+    for (let i = 0; i < ids.length; i++)
+      for (let j = i + 1; j < ids.length; j++)
+        if (ageCompatible(ids[i]!, ids[j]!)) candidates.add(pairKey(ids[i]!, ids[j]!).join("|"));
   }
 
-  // Add shared-game pairs: 3+ games against the same opponent on the same date is
-  // near-proof of the same team (scores are checked for closeness later).
+  // Signal 2: 3+ games against the same opponent on the same date — near-proof of
+  // the same team (scores checked for closeness later). Same-age only.
   for (const [k, score] of pairScores) {
-    if (score >= 3) candidates.add(k);
+    if (score < 3) continue;
+    const [a, b] = k.split("|") as [string, string];
+    if (ageCompatible(a, b)) candidates.add(k);
   }
 
   return { candidates, pairScores, dismissed };
