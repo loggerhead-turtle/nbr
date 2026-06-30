@@ -8,22 +8,7 @@ import {
   recomputeRatingsAction,
 } from "@/lib/admin-actions";
 import type { ReconcileSnapshot, ReconcileTeamFinding } from "@nbr/core";
-
-const gcUrl = (id: string) => `https://web.gc.com/teams/${id}/schedule`;
-
-function GcLink({ gcTeamId }: { gcTeamId: string | null }) {
-  if (!gcTeamId) return null;
-  return (
-    <a
-      href={gcUrl(gcTeamId)}
-      target="_blank"
-      rel="noreferrer"
-      className="inline-flex items-center gap-1 rounded-md bg-sky-600 px-2 py-0.5 text-xs font-bold text-white hover:bg-sky-700"
-    >
-      GC ↗
-    </a>
-  );
-}
+import { NbrLink, GcLink } from "./team-links";
 
 export function ReconcileReview({ snapshot }: { snapshot: ReconcileSnapshot }) {
   const router = useRouter();
@@ -162,6 +147,7 @@ function ExtrasCard({ team, onDone }: { team: ReconcileTeamFinding; onDone: () =
         <span className="flex flex-wrap items-center gap-2 font-semibold">
           {team.name}
           {team.ageGroup && <span className="text-white/60">({team.ageGroup})</span>}
+          <NbrLink slug={team.slug} />
           <GcLink gcTeamId={team.gcTeamId} />
           {team.sparse && (
             <span className="rounded-full bg-amber-400 px-2 py-0.5 text-xs font-bold text-amber-950">
@@ -230,6 +216,7 @@ function DeadIdCard({ team, onDone }: { team: ReconcileTeamFinding; onDone: () =
       <span className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-semibold text-slate-800">{team.name}</span>
         {team.ageGroup && <span className="text-slate-400">({team.ageGroup})</span>}
+        <NbrLink slug={team.slug} />
         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">
           {team.dbCount} game(s) in DB · page empty
         </span>

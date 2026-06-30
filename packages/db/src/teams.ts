@@ -235,6 +235,7 @@ export async function findAutoMergeTarget(target: {
 export interface GhostMergeSuggestion {
   targetId: string;
   targetName: string;
+  targetSlug: string;
   targetCity: string | null;
   targetState: string | null;
   targetGcTeamId: string | null;
@@ -246,6 +247,7 @@ export interface GhostMergeSuggestion {
 export interface GhostTeamWithSuggestions {
   id: string;
   name: string;
+  slug: string;
   ageGroup: string | null;
   city: string | null;
   state: string | null;
@@ -267,6 +269,7 @@ export async function getGhostTeamsWithSuggestions(limit = 100): Promise<GhostTe
     select: {
       id: true,
       name: true,
+      slug: true,
       ageGroup: true,
       city: true,
       state: true,
@@ -292,6 +295,7 @@ export async function getGhostTeamsWithSuggestions(limit = 100): Promise<GhostTe
           select: {
             id: true,
             name: true,
+            slug: true,
             ageGroup: true,
             city: true,
             state: true,
@@ -348,6 +352,7 @@ export async function getGhostTeamsWithSuggestions(limit = 100): Promise<GhostTe
       suggestions.push({
         targetId: c.id,
         targetName: c.name,
+        targetSlug: c.slug,
         targetCity: c.city,
         targetState: c.state,
         targetGcTeamId: c.gcTeamId,
@@ -360,6 +365,7 @@ export async function getGhostTeamsWithSuggestions(limit = 100): Promise<GhostTe
     results.push({
       id: g.id,
       name: g.name,
+      slug: g.slug,
       ageGroup: g.ageGroup,
       city: g.city,
       state: g.state,
@@ -563,6 +569,7 @@ export interface BadMergeOutlier {
 export interface BadMergeFinding {
   teamId: string;
   teamName: string;
+  teamSlug: string;
   teamAge: number;
   gcTeamId: string | null;
   /** Games within one age year of the team — its legitimate base. */
@@ -591,6 +598,7 @@ export async function findCrossAgeMergeArtifacts(
     select: {
       id: true,
       name: true,
+      slug: true,
       ageGroup: true,
       gcTeamId: true,
       homeGames: {
@@ -647,6 +655,7 @@ export async function findCrossAgeMergeArtifacts(
       findings.push({
         teamId: t.id,
         teamName: t.name,
+        teamSlug: t.slug,
         teamAge,
         gcTeamId: t.gcTeamId,
         ownCohortGames,

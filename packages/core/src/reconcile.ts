@@ -19,6 +19,7 @@ export interface ReconcileExtraGame {
 export interface ReconcileTeamFinding {
   teamId: string;
   name: string;
+  slug: string;
   gcTeamId: string | null;
   ageGroup: string | null;
   /** Games we have stored for this team. */

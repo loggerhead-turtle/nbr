@@ -2,6 +2,7 @@
 
 import { useState, useTransition, type FormEvent } from "react";
 import { mergeGhostAction, searchMergeTargets } from "@/lib/admin-actions";
+import { NbrLink, GcLink } from "./team-links";
 import type { MergeTargetOption } from "@/lib/merge-types";
 import type { GhostTeamWithSuggestions, GhostMergeSuggestion } from "@nbr/db";
 import type { MergeTier } from "@nbr/core";
@@ -12,8 +13,6 @@ const TIER_STYLE: Record<MergeTier, { bar: string; chip: string; label: string }
   low: { bar: "bg-rose-500", chip: "bg-rose-100 text-rose-800", label: "Low" },
   none: { bar: "bg-slate-400", chip: "bg-slate-200 text-slate-700", label: "No match" },
 };
-
-const gcUrl = (id: string) => `https://web.gc.com/teams/${id}/schedule`;
 
 export function GhostReview({
   withMatch,
@@ -103,7 +102,10 @@ function GhostCard({
   return (
     <div className={`card overflow-hidden ${pending ? "opacity-50" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-2 bg-navy-900 px-4 py-2 text-sm text-white">
-        <span className="font-semibold">{ghost.name}</span>
+        <span className="flex flex-wrap items-center gap-2 font-semibold">
+          {ghost.name}
+          <NbrLink slug={ghost.slug} />
+        </span>
         <span className="flex items-center gap-2 text-xs">
           <span className="rounded-full bg-white/15 px-2 py-0.5">
             {ghost.ageGroup ?? "no age"}
@@ -199,18 +201,10 @@ function Suggestion({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-semibold text-slate-800">
-            {s.targetName}
-            {s.targetGcTeamId && (
-              <a
-                href={gcUrl(s.targetGcTeamId)}
-                target="_blank"
-                rel="noreferrer"
-                className="ml-2 text-xs font-normal text-sky-600 underline hover:text-sky-800"
-              >
-                GameChanger ↗
-              </a>
-            )}
+          <p className="flex flex-wrap items-center gap-2 font-semibold text-slate-800">
+            <span className="truncate">{s.targetName}</span>
+            <NbrLink slug={s.targetSlug} />
+            <GcLink gcTeamId={s.targetGcTeamId} />
           </p>
           <p className="text-xs text-slate-500">
             {s.targetCity ? `${s.targetCity}${s.targetState ? `, ${s.targetState}` : ""}` : "no location"}
