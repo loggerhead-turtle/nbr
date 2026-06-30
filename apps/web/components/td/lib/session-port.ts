@@ -64,8 +64,8 @@ function flattenBracket(bracket: BracketResult): BracketGameInput[] {
   return out;
 }
 
-const KEY = "nbr-demo-td-v1";
-const VERSION = 1;
+const KEY = "nbr-demo-td-v2";
+const VERSION = 2;
 
 interface Persisted {
   version: number;
