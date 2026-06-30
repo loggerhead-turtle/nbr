@@ -62,7 +62,9 @@ services:
     runtime: docker
     dockerfilePath: ./apps/worker/Dockerfile
     schedule: "17 * * * *" # hourly, at :17 (avoids round-number patterns)
-    autoDeploy: true
+    # Docker build (Chromium) is expensive in pipeline minutes and the scraper
+    # rarely changes — deploy it manually when its code does, not on every push.
+    autoDeploy: false
     envVars:
       - fromGroup: nbr
 
@@ -75,7 +77,8 @@ services:
     dockerfilePath: ./apps/worker/Dockerfile
     dockerCommand: pnpm --filter @nbr/worker maxpreps
     schedule: "0 9 1 7 *" # 09:00 on Jul 1 (placeholder; trigger manually)
-    autoDeploy: true
+    # Expensive Docker build + placeholder schedule — deploy manually only.
+    autoDeploy: false
     envVars:
       - fromGroup: nbr
 
@@ -102,7 +105,8 @@ services:
     buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm --filter @nbr/db generate
     startCommand: pnpm --filter @nbr/worker geocode
     schedule: "0 9 1 1 *" # 09:00 on Jan 1 (placeholder; trigger manually)
-    autoDeploy: true
+    # Placeholder schedule, run manually — no need to rebuild on every push.
+    autoDeploy: false
     envVars:
       - key: NODE_VERSION
         value: "22"
