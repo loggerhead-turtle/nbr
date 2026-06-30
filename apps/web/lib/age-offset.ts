@@ -9,17 +9,23 @@
 import {
   AGE_OFFSET_KEY,
   AGE_OFFSET_STEP_OLDER_KEY,
+  AGE_OFFSETS_KEY,
   DEFAULT_AGE_STEP,
   DEFAULT_AGE_STEP_OLDER,
+  DEFAULT_AGE_OFFSETS,
   ageBaselinePoints,
+  parseAgeOffsets,
   clampAgeStep,
 } from "@nbr/core";
 
 export {
   AGE_OFFSET_KEY,
   AGE_OFFSET_STEP_OLDER_KEY,
+  AGE_OFFSETS_KEY,
   DEFAULT_AGE_STEP,
   DEFAULT_AGE_STEP_OLDER,
+  DEFAULT_AGE_OFFSETS,
+  parseAgeOffsets,
   clampAgeStep,
 };
 

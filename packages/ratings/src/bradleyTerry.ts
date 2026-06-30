@@ -51,6 +51,13 @@ export interface BradleyTerryOptions {
    * Teams with an unrecognised/absent key behave like the plain model (β = 0).
    */
   ageGroup?: Map<string, string>;
+  /**
+   * Explicit per-age-group baseline in DISPLAY points (14U = 0), e.g.
+   * {U12: -400, U14: 0, U16: 200}. When an age is present here it overrides the
+   * per-year step model for that bracket — lets an admin tune each age directly.
+   * Ages absent from the map fall back to the step computation.
+   */
+  ageBaselineByGroup?: Map<string, number>;
   /** Per-age-year developmental step (θ units) below `ageOlderThreshold`. */
   ageStepPrior?: number;
   /**
@@ -269,9 +276,13 @@ export function computeRatingsBT(
     // The developmental curve, centered at 14U (= BASE). When fitting it is a
     // warm-start; when fixed (the default) it stays exactly this — `step` points
     // per age-year, robust to selection-biased bridge games.
+    // Explicit admin per-group offset (display points → θ) wins; else the curve.
+    const explicit = options.ageBaselineByGroup?.get(a);
     beta.set(
       a,
-      ageBaseline(ageYear(a)!, opt.ageStepPrior, opt.ageStepOlder, opt.ageOlderThreshold, AGE_ANCHOR_YEAR),
+      explicit != null
+        ? explicit / SCALE
+        : ageBaseline(ageYear(a)!, opt.ageStepPrior, opt.ageStepOlder, opt.ageOlderThreshold, AGE_ANCHOR_YEAR),
     );
     bridgeCount.set(a, 0);
   }

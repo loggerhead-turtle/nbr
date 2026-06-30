@@ -22,7 +22,7 @@ import {
   normalizeWebsiteUrl,
   isRatingAlgorithm,
 } from "@nbr/core";
-import { AGE_OFFSET_KEY, AGE_OFFSET_STEP_OLDER_KEY, clampAgeStep } from "./age-offset";
+import { AGE_OFFSETS_KEY } from "./age-offset";
 import { LIVE_SEARCH_KEY } from "./site-settings";
 import { findPromotableTeam, mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew, triggerRecompute } from "./render-jobs";
@@ -433,22 +433,21 @@ export async function setLiveSearchAction(formData: FormData): Promise<void> {
 }
 
 /** Save the admin-tunable cross-age rating offset (points per age year). */
-export async function setAgeOffsetStepAction(formData: FormData): Promise<void> {
+export async function setAgeOffsetsAction(formData: FormData): Promise<void> {
   await requireAdmin();
-  const step = clampAgeStep(formData.get("step"));
-  const stepOlder = clampAgeStep(formData.get("stepOlder") ?? 75);
-  await Promise.all([
-    prisma.appSetting.upsert({
-      where: { key: AGE_OFFSET_KEY },
-      create: { key: AGE_OFFSET_KEY, value: String(step) },
-      update: { value: String(step) },
-    }),
-    prisma.appSetting.upsert({
-      where: { key: AGE_OFFSET_STEP_OLDER_KEY },
-      create: { key: AGE_OFFSET_STEP_OLDER_KEY, value: String(stepOlder) },
-      update: { value: String(stepOlder) },
-    }),
-  ]);
+  // One numeric field per age group (name="offset_U12"), points relative to 14U=0.
+  const offsets: Record<string, number> = {};
+  for (const a of AGE_GROUPS) {
+    const raw = formData.get(`offset_${a}`);
+    if (raw == null || String(raw).trim() === "") continue;
+    const n = Number(raw);
+    if (Number.isFinite(n)) offsets[a] = Math.max(-5000, Math.min(5000, Math.round(n)));
+  }
+  await prisma.appSetting.upsert({
+    where: { key: AGE_OFFSETS_KEY },
+    create: { key: AGE_OFFSETS_KEY, value: JSON.stringify(offsets) },
+    update: { value: JSON.stringify(offsets) },
+  });
   revalidatePath("/admin/age-offset");
 }
 
