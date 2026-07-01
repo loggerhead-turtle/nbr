@@ -13,6 +13,7 @@ import {
   deleteOrphanGhosts,
   getGhostSplitGroups,
   reassignTeamGames,
+  GHOST_MERGE_DISMISSALS_KEY,
   type GhostSplitGroup,
 } from "@nbr/db";
 import {
@@ -32,7 +33,7 @@ import {
 } from "@nbr/core";
 import { AGE_OFFSETS_KEY } from "./age-offset";
 import { LIVE_SEARCH_KEY } from "./site-settings";
-import { findPromotableTeam, mergeTeams } from "./teams";
+import { mergeTeams } from "./teams";
 import { triggerScrapeTeam, triggerScrapeNew, triggerRecompute } from "./render-jobs";
 import type { MergeTargetOption } from "./merge-types";
 import {
@@ -150,38 +151,11 @@ export async function createTeamAction(
     }
   }
 
-  // If this team already exists as an auto-created ghost, promote it in place so
-  // its existing games carry over instead of creating a duplicate.
-  const promo = await findPromotableTeam(data.name, data.ageGroup);
-  if (promo) {
-    await prisma.team.update({
-      where: { id: promo.id },
-      data: {
-        name: data.name,
-        gcTeamId: data.gcTeamId ?? null,
-        ageGroup: data.ageGroup ?? undefined,
-        division: data.division ?? undefined,
-        city: data.city ?? undefined,
-        state: data.state,
-        zip: data.zip ?? undefined,
-        isGhost: false,
-        scrapeEnabled: true,
-        lastScrapedAt: null,
-        nextScrapeAfter: null,
-        consecutiveFailures: 0,
-      },
-    });
-    if (data.gcTeamId) await triggerScrapeTeam(data.gcTeamId);
-    revalidatePath("/");
-    revalidatePath("/admin/teams");
-    return {
-      ok: true,
-      message: `Linked to existing team “${promo.name}” (kept its ${promo.games} game${
-        promo.games === 1 ? "" : "s"
-      }). Scraping now.`,
-    };
-  }
-
+  // NOTE: we no longer auto-promote a matching ghost into this new team. A
+  // ghost is a name-only opponent and same-name/age is not proof it's the same
+  // club, so silently folding it in is how contamination spread. Instead the new
+  // team is created fresh; if a ghost strongly matches it, the match surfaces on
+  // the Merge queue (/admin/merge-queue) for a human to approve.
   const slug = await uniqueSlug(teamSlug(data.name, data.ageGroup));
 
   const team = await prisma.team.create({
@@ -509,9 +483,37 @@ export async function mergeGhostAction(formData: FormData): Promise<void> {
   // The ghost (source) folds into the real team (target), which keeps its id.
   await mergeTeams(ghostId, targetId);
   revalidatePath("/admin/ghosts");
+  revalidatePath("/admin/merge-queue");
   revalidatePath("/admin/duplicates");
   revalidatePath("/admin/teams");
   revalidatePath("/");
+}
+
+/**
+ * Dismiss a ghost↔real match on the Merge queue: record the pair so it stops
+ * being suggested. Stored as a JSON array of "ghostId|targetId" keys in
+ * AppSetting (no schema change). Best-effort — dismissing is advisory.
+ */
+export async function dismissGhostMergeAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const key = String(formData.get("dismissKey") ?? "").trim();
+  if (!key.includes("|")) return;
+  try {
+    const row = await prisma.appSetting.findUnique({
+      where: { key: GHOST_MERGE_DISMISSALS_KEY },
+    });
+    const arr: string[] = row?.value ? JSON.parse(row.value) : [];
+    const set = new Set(Array.isArray(arr) ? arr : []);
+    set.add(key);
+    await prisma.appSetting.upsert({
+      where: { key: GHOST_MERGE_DISMISSALS_KEY },
+      create: { key: GHOST_MERGE_DISMISSALS_KEY, value: JSON.stringify([...set]) },
+      update: { value: JSON.stringify([...set]) },
+    });
+  } catch {
+    // ignore — dismissing is best-effort
+  }
+  revalidatePath("/admin/merge-queue");
 }
 
 /**

@@ -89,6 +89,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             )}
           </Link>
           <Link
+            href="/admin/merge-queue"
+            className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Merge queue
+          </Link>
+          <Link
             href="/admin/bad-merges"
             className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
           >

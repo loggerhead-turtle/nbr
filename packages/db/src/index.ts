@@ -35,6 +35,8 @@ export {
   getGhostSplitGroups,
   reassignTeamGames,
   getGhostDetail,
+  getGhostMergeQueue,
+  GHOST_MERGE_DISMISSALS_KEY,
 } from "./teams";
 export type {
   BadMergeFinding,
@@ -48,4 +50,7 @@ export type {
   GhostSplitGroup,
   GhostGameOrigin,
   GhostDetail,
+  GhostMergeQueueItem,
+  GhostMergeQueueGhost,
+  GhostMergeQueueTarget,
 } from "./teams";

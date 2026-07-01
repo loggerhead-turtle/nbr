@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@nbr/db";
 import { createTeamSchema, teamSlug } from "@nbr/core";
-import { findPromotableTeam } from "./teams";
 import { triggerScrapeTeam } from "./render-jobs";
 import { getCurrentSeasonYear } from "./season";
 import type { ActionState } from "./admin-actions";
@@ -51,34 +50,10 @@ export async function submitTeamAction(
     }
   }
 
-  // Promote a matching ghost team in place instead of creating a duplicate.
-  const promo = await findPromotableTeam(data.name, data.ageGroup);
-  if (promo) {
-    await prisma.team.update({
-      where: { id: promo.id },
-      data: {
-        name: data.name,
-        gcTeamId: data.gcTeamId ?? null,
-        ageGroup: data.ageGroup ?? undefined,
-        city: data.city ?? undefined,
-        state: data.state,
-        zip: data.zip ?? undefined,
-        isGhost: false,
-        scrapeEnabled: true,
-        lastScrapedAt: null,
-        nextScrapeAfter: null,
-        consecutiveFailures: 0,
-      },
-    });
-    if (data.gcTeamId) await triggerScrapeTeam(data.gcTeamId);
-    revalidatePath("/");
-    return {
-      ok: true,
-      message:
-        "Thanks! We matched this to a team already in our system and linked it. Its scores will start updating shortly.",
-    };
-  }
-
+  // We no longer auto-merge a matching ghost into a public submission — same
+  // name/age isn't proof it's the same club. The team is created fresh; an admin
+  // reviews any strong ghost match on the Merge queue before the games are folded
+  // in, so a mistaken match can't silently contaminate ratings.
   const slug = await uniqueSlug(teamSlug(data.name, data.ageGroup));
   await prisma.team.create({
     data: {

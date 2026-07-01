@@ -33,6 +33,14 @@ export default async function GhostsPage() {
         instead of trusting the score. Merge into the suggested team, search for a different target,
         or leave it. Merging folds the ghost&rsquo;s games into the real team and deletes the ghost.
       </p>
+      <p className="mb-6 max-w-2xl text-sm text-slate-500">
+        Reviewing matches for <strong>recently added</strong> teams? The{" "}
+        <a href="/admin/merge-queue" className="font-medium text-sky-600 hover:text-sky-800">
+          Merge queue
+        </a>{" "}
+        shows only confident ghost matches for newly added teams — the review step that replaced
+        auto-merging on team add.
+      </p>
       <BulkGhostDelete count={exactMatchCount} />
       <OrphanGhostCleanup count={orphanCount} />
       <GhostReview withMatch={withMatch} orphans={orphans} />
