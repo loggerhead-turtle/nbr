@@ -20,6 +20,7 @@
  * is pure text parsing in parseScheduleText() so it is fully unit-testable.
  */
 import type { Page } from "playwright";
+import { pageLinks } from "./browser.js";
 
 export interface ParsedGame {
   gcGameId: string | null;
@@ -31,9 +32,51 @@ export interface ParsedGame {
   playedAt: string | null; // ISO date string
 }
 
+const RESULT_RE = /\b[WLT]\s+\d{1,2}-\d{1,2}\b/;
+
+/** The GameChanger per-game UUID from a schedule link (/teams/<id>/schedule/<uuid>). */
+function gameUuidFromHref(href: string): string | null {
+  const m = href.match(/\/schedule\/([0-9a-fA-F-]{8,})/);
+  return m?.[1] ?? null;
+}
+
 export async function parseSchedule(page: Page): Promise<ParsedGame[]> {
   const text = await page.evaluate(() => document.body?.innerText ?? "");
-  return parseScheduleText(text);
+  const games = parseScheduleText(text);
+
+  // Best-effort: attach GameChanger per-game UUIDs from the schedule DOM. Each
+  // game row links to /teams/<id>/schedule/<uuid>; a completed row's link text
+  // carries the W/L/T result. We collect completed-game uuids in DOM order and,
+  // only when their count matches the parsed completed games, zip them — never
+  // guessing a mapping. (The uuid is per-team, so it powers within-team
+  // incremental updates / doubleheaders, not cross-team matching.)
+  try {
+    const links = await pageLinks(page);
+    const seen = new Map<string, boolean>(); // uuid -> any link text had a result
+    const order: string[] = [];
+    for (const l of links) {
+      const uuid = gameUuidFromHref(l.href);
+      if (!uuid) continue;
+      const hasResult = RESULT_RE.test(l.text);
+      if (!seen.has(uuid)) {
+        seen.set(uuid, hasResult);
+        order.push(uuid);
+      } else if (hasResult && !seen.get(uuid)) {
+        seen.set(uuid, true);
+      }
+    }
+    const completed = order.filter((u) => seen.get(u));
+    if (completed.length === games.length) {
+      for (let i = 0; i < games.length; i++) games[i]!.gcGameId = completed[i]!;
+    } else {
+      console.log(
+        `[parse] game-uuid capture skipped: ${completed.length} completed link(s) vs ${games.length} parsed game(s)`,
+      );
+    }
+  } catch {
+    // best-effort — game data stands without ids
+  }
+  return games;
 }
 
 export interface TeamHeader {
@@ -42,6 +85,8 @@ export interface TeamHeader {
   state: string | null;
   ageGroup: string | null; // AgeGroup enum value (U8..U18) or null
   coaches: string[]; // staff names from the "Staff: ..." line
+  season: string | null; // GC season label, e.g. "Spring 2026"
+  record: string | null; // GC stated W-L, e.g. "16-17"
 }
 
 const VALID_AGE_GROUPS = new Set([
@@ -54,7 +99,15 @@ const VALID_AGE_GROUPS = new Set([
  * i.e. <name> <record> <season> <City, ST> before "Staff:" / "Follow team".
  */
 export function parseTeamHeader(rawText: string): TeamHeader {
-  const empty: TeamHeader = { name: null, city: null, state: null, ageGroup: null, coaches: [] };
+  const empty: TeamHeader = {
+    name: null,
+    city: null,
+    state: null,
+    ageGroup: null,
+    coaches: [],
+    season: null,
+    record: null,
+  };
   const text = rawText.replace(/\s+/g, " ").trim();
   if (!text || /Oops! We could/i.test(text)) return empty;
 
@@ -82,6 +135,8 @@ export function parseTeamHeader(rawText: string): TeamHeader {
     state: loc?.[2] ?? null,
     ageGroup,
     coaches: parseCoaches(text),
+    season: season?.[0]?.replace(/\s+/g, " ").trim() ?? null,
+    record: rec?.[0] ?? null,
   };
 }
 
