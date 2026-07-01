@@ -102,6 +102,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             GC lookup
           </Link>
           <Link
+            href="/admin/scraper-pay"
+            className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Scraper pay
+          </Link>
+          <Link
             href="/admin/bad-merges"
             className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
           >

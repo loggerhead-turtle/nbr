@@ -156,6 +156,7 @@ model Team {
   reports          Report[]
   scrimmagePref    ScrimmagePref?
   tournamentInvites TournamentInvite[]
+  scrapeCredit     ScrapeCredit?
 
   @@index([state, ageGroup])
   @@index([classification])
@@ -346,6 +347,41 @@ model User {
   scrimmagePref ScrimmagePref[]
   tournaments   Tournament[]
   umpire        Umpire?
+  scrapeCredits ScrapeCredit[]
+  payouts       Payout[]
+}
+
+// One paid "team added" event: the game-scraper who added a team, with the pay
+// rate snapshotted at add time so historical pay is stable if the rate changes.
+model ScrapeCredit {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The team that was added. Nullable + SetNull so pay history survives a later
+  // team delete/merge; gcTeamId keeps a stable reference either way.
+  teamId    String?  @unique
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  gcTeamId  String?
+  rateCents Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+// A payout an admin recorded for a scraper. `paidThrough` marks the cutoff:
+// credits at or before it are considered paid, so "since last pay period" is the
+// sum of credits after the latest payout's paidThrough.
+model Payout {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountCents Int
+  teamsCount  Int      @default(0)
+  paidThrough DateTime
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model Tournament {

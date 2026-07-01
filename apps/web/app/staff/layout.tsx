@@ -28,6 +28,12 @@ export default async function StaffLayout({ children }: { children: React.ReactN
           >
             Add game
           </Link>
+          <Link
+            href="/staff/leaderboard"
+            className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Leaderboard
+          </Link>
           <Link href="/account" className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100">
             Account
           </Link>
