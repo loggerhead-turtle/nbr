@@ -58,6 +58,9 @@ enum ScrapeStatus {
 enum UserRole {
   USER
   ADMIN
+  // Limited staff login: may add games and use the GameChanger lookup (add
+  // teams), plus manage their own account. No other admin access.
+  GAME_SCRAPER
 }
 
 enum ClaimStatus {

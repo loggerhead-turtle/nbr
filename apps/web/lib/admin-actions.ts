@@ -55,6 +55,7 @@ import {
   createSessionToken,
   isAdmin,
 } from "./auth";
+import { isCurrentUserScraper } from "./user-auth";
 
 export interface ActionState {
   ok?: boolean;
@@ -64,6 +65,13 @@ export interface ActionState {
 
 async function requireAdmin() {
   if (!(await isAdmin())) redirect("/admin/login");
+}
+
+/** Allow full admins OR limited game-scraper staff (add games, GC lookup). */
+async function requireStaff() {
+  if (await isAdmin()) return;
+  if (await isCurrentUserScraper()) return;
+  redirect("/login?next=/staff/gc-lookup");
 }
 
 export async function loginAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -192,7 +200,7 @@ export async function quickAddTeamsAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireStaff();
 
   const raw = String(formData.get("ids") ?? "");
   const tokens = raw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
@@ -246,7 +254,7 @@ export async function createGameAction(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireAdmin();
+  await requireStaff();
 
   const raw = {
     homeTeamId: formData.get("homeTeamId"),
@@ -649,8 +657,11 @@ export async function setUserRoleAction(formData: FormData): Promise<void> {
   await requireAdmin();
   const userId = String(formData.get("userId") ?? "");
   const role = String(formData.get("role") ?? "");
-  if (!userId || !["ADMIN", "USER"].includes(role)) return;
-  await prisma.user.update({ where: { id: userId }, data: { role: role as "ADMIN" | "USER" } });
+  if (!userId || !["ADMIN", "USER", "GAME_SCRAPER"].includes(role)) return;
+  await prisma.user.update({
+    where: { id: userId },
+    data: { role: role as "ADMIN" | "USER" | "GAME_SCRAPER" },
+  });
   revalidatePath("/admin/users");
 }
 

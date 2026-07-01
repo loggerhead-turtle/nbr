@@ -9,8 +9,6 @@ import { quickAddTeamsAction, type ActionState } from "@/lib/admin-actions";
 import { NbrLink } from "./team-links";
 import type { TeamOpponentsView } from "@nbr/db";
 
-const BASE = "/admin/gc-lookup";
-
 /**
  * Front-page-style live search for VERIFIED teams, with an age-group filter.
  * Both controls soft-navigate (?q=&age=) so scroll position is kept.
@@ -20,11 +18,13 @@ export function GcLookupSearch({
   defaultAge,
   defaultState,
   states,
+  basePath = "/admin/gc-lookup",
 }: {
   defaultQuery?: string;
   defaultAge?: string;
   defaultState?: string;
   states: string[];
+  basePath?: string;
 }) {
   const router = useRouter();
   const qRef = useRef<HTMLInputElement>(null);
@@ -41,7 +41,7 @@ export function GcLookupSearch({
     if (age) params.set("age", age);
     if (state) params.set("state", state);
     const qs = params.toString();
-    router.replace(qs ? `${BASE}?${qs}` : BASE, { scroll: false });
+    router.replace(qs ? `${basePath}?${qs}` : basePath, { scroll: false });
   };
 
   return (

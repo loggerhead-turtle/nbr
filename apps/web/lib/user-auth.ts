@@ -97,3 +97,19 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
   if (!user) return false;
   return user.role === "ADMIN" || adminAllowlist().includes(user.email.toLowerCase());
 }
+
+/** True when the signed-in user is a limited game-scraper staff account. */
+export async function isCurrentUserScraper(): Promise<boolean> {
+  const user = await getCurrentUser();
+  return user?.role === "GAME_SCRAPER";
+}
+
+/**
+ * Staff access for the limited /staff area: admins (full) OR game-scraper
+ * accounts. Returns which, or null when the user is neither.
+ */
+export async function getStaffAccess(): Promise<"admin" | "scraper" | null> {
+  if (await isCurrentUserAdmin()) return "admin";
+  if (await isCurrentUserScraper()) return "scraper";
+  return null;
+}
