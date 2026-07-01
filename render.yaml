@@ -102,6 +102,19 @@ services:
     envVars:
       - fromGroup: nbr
 
+  # Read-only DOM inspector: dumps a team's schedule links (opponent + game IDs)
+  # to see what GameChanger exposes. Set INSPECT_TEAM=<gcTeamId> and Trigger Run.
+  # Needs Chromium → Docker. Manual only.
+  - type: cron
+    name: nbr-inspect
+    runtime: docker
+    dockerfilePath: ./apps/worker/Dockerfile
+    dockerCommand: pnpm --filter @nbr/worker inspect-links
+    schedule: "0 9 1 1 *" # placeholder; trigger manually
+    autoDeploy: false
+    envVars:
+      - fromGroup: nbr
+
   # Recompute needs no browser, so it runs on the plain Node runtime (no Docker).
   - type: cron
     name: nbr-recompute
