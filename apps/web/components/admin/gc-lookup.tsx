@@ -18,21 +18,28 @@ const BASE = "/admin/gc-lookup";
 export function GcLookupSearch({
   defaultQuery,
   defaultAge,
+  defaultState,
+  states,
 }: {
   defaultQuery?: string;
   defaultAge?: string;
+  defaultState?: string;
+  states: string[];
 }) {
   const router = useRouter();
   const qRef = useRef<HTMLInputElement>(null);
   const ageRef = useRef<HTMLSelectElement>(null);
+  const stateRef = useRef<HTMLSelectElement>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const go = () => {
     const params = new URLSearchParams();
     const q = qRef.current?.value.trim();
     const age = ageRef.current?.value;
+    const state = stateRef.current?.value;
     if (q) params.set("q", q);
     if (age) params.set("age", age);
+    if (state) params.set("state", state);
     const qs = params.toString();
     router.replace(qs ? `${BASE}?${qs}` : BASE, { scroll: false });
   };
@@ -57,6 +64,14 @@ export function GcLookupSearch({
           </option>
         ))}
       </select>
+      <select ref={stateRef} defaultValue={defaultState ?? ""} className="input" onChange={go}>
+        <option value="">All states</option>
+        {states.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -78,17 +93,19 @@ export function StickyAddTeams() {
   return (
     <div className="fixed bottom-4 right-4 z-50 w-[min(92vw,22rem)] rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
       <form ref={formRef} action={action} className="flex flex-col gap-2">
-        <div className="flex gap-2">
-          <input
-            name="ids"
-            placeholder="Paste GameChanger ID(s)…"
-            className="input flex-1 font-mono text-sm"
-            aria-label="GameChanger team IDs"
-          />
-          <button type="submit" disabled={pending} className="btn-primary shrink-0 disabled:opacity-50">
-            {pending ? "Adding…" : "Add teams"}
-          </button>
-        </div>
+        <label className="text-xs font-semibold text-slate-500">
+          Add teams by GameChanger ID
+        </label>
+        <textarea
+          name="ids"
+          rows={6}
+          placeholder={"Paste GameChanger ID(s) — one per line,\nor separated by spaces/commas"}
+          className="input resize-y font-mono text-sm"
+          aria-label="GameChanger team IDs"
+        />
+        <button type="submit" disabled={pending} className="btn-primary disabled:opacity-50">
+          {pending ? "Adding…" : "Add teams"}
+        </button>
         {state.error && <p className="text-xs font-medium text-rose-600">{state.error}</p>}
         {state.ok && state.message && (
           <p className="text-xs font-medium text-emerald-700">{state.message}</p>

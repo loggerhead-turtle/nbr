@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getLookupTeams, getUnverifiedOpponents } from "@nbr/db";
+import { getLookupTeams, getLookupStates, getUnverifiedOpponents } from "@nbr/db";
 import { AGE_GROUPS } from "@nbr/core";
 import {
   GcLookupSearch,
@@ -20,10 +20,12 @@ export default async function GcLookupPage({
   const q = sp.q?.trim() || undefined;
   const age =
     sp.age && (AGE_GROUPS as readonly string[]).includes(sp.age) ? sp.age : undefined;
+  const state = sp.state?.trim().toUpperCase() || undefined;
   const selectedId = sp.team || undefined;
 
-  const [teams, view] = await Promise.all([
-    getLookupTeams({ q, ageGroup: age }),
+  const [teams, states, view] = await Promise.all([
+    getLookupTeams({ q, ageGroup: age, state }),
+    getLookupStates(),
     selectedId ? getUnverifiedOpponents(selectedId) : Promise.resolve(null),
   ]);
 
@@ -31,6 +33,7 @@ export default async function GcLookupPage({
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (age) params.set("age", age);
+    if (state) params.set("state", state);
     params.set("team", id);
     return `/admin/gc-lookup?${params.toString()}`;
   };
@@ -48,7 +51,7 @@ export default async function GcLookupPage({
       </p>
 
       <div className="mb-5">
-        <GcLookupSearch defaultQuery={q} defaultAge={age} />
+        <GcLookupSearch defaultQuery={q} defaultAge={age} defaultState={state} states={states} />
       </div>
 
       <div className="grid gap-5 md:grid-cols-[minmax(0,20rem)_1fr]">
@@ -57,6 +60,7 @@ export default async function GcLookupPage({
           <p className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
             {q ? `Matches for “${q}”` : "Most unverified opponents"}
             {age ? ` · ${ageGroupLabel(age)}` : ""}
+            {state ? ` · ${state}` : ""}
           </p>
           {teams.length === 0 ? (
             <p className="px-3 py-4 text-sm text-slate-400">No verified teams found.</p>

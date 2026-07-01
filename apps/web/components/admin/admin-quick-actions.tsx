@@ -1,7 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { scrapeNewTeamsAction, recomputeRatingsAction, type ActionState } from "@/lib/admin-actions";
+import {
+  scrapeNewTeamsAction,
+  recomputeRatingsAction,
+  dedupeGamesAction,
+  type ActionState,
+} from "@/lib/admin-actions";
 
 /**
  * Compact toolbar shown on every admin page: kick a scrape of just-added teams,
@@ -37,6 +42,22 @@ export function AdminQuickActions() {
         title="Recompute all ratings now"
       >
         {pending ? "Working…" : "Recompute ratings"}
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (
+            window.confirm(
+              "Remove duplicate games across all teams? Keeps the verified copy of each matchup, then recomputes.",
+            )
+          )
+            run(dedupeGamesAction);
+        }}
+        disabled={pending}
+        className="rounded-md bg-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+        title="Delete duplicate games left by merges (keeps the verified-opponent copy)"
+      >
+        {pending ? "Working…" : "Remove duplicate games"}
       </button>
       {msg?.message && (
         <span className="text-xs font-medium text-emerald-700">{msg.message}</span>
