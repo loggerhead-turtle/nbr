@@ -37,6 +37,8 @@ export {
   getGhostDetail,
   getGhostMergeQueue,
   refreshTeamPendingMerge,
+  getLookupTeams,
+  getUnverifiedOpponents,
   GHOST_MERGE_DISMISSALS_KEY,
 } from "./teams";
 export type {
@@ -54,4 +56,7 @@ export type {
   GhostMergeQueueItem,
   GhostMergeQueueGhost,
   GhostMergeQueueTarget,
+  LookupTeam,
+  UnverifiedOpponent,
+  TeamOpponentsView,
 } from "./teams";
