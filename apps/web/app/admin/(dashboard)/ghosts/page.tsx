@@ -6,6 +6,7 @@ import {
 import { GhostReview } from "@/components/admin/ghost-review";
 import { BulkGhostDelete } from "@/components/admin/bulk-ghost-delete";
 import { OrphanGhostCleanup } from "@/components/admin/orphan-ghost-cleanup";
+import { MergeDuplicateGhosts } from "@/components/admin/merge-duplicate-ghosts";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ghost teams", robots: { index: false } };
@@ -41,6 +42,7 @@ export default async function GhostsPage() {
         shows only confident ghost matches for newly added teams — the review step that replaced
         auto-merging on team add.
       </p>
+      <MergeDuplicateGhosts />
       <BulkGhostDelete count={exactMatchCount} />
       <OrphanGhostCleanup count={orphanCount} />
       <GhostReview withMatch={withMatch} orphans={orphans} />

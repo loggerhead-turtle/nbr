@@ -15,6 +15,7 @@ import {
   reassignTeamGames,
   refreshTeamPendingMerge,
   dedupeAllGames,
+  mergeDuplicateGhosts,
   getScrapePayRateCents,
   setScrapePayRateCents,
   setScrapeGoals,
@@ -931,6 +932,27 @@ export async function rescrapeAllAction(): Promise<ActionState> {
         error:
           "Couldn't start the job. Set RENDER_API_KEY and RENDER_WORKER_SERVICE_ID (see server logs).",
       };
+}
+
+/**
+ * Merge duplicate ghost teams (same name + age) into one — cleanup for the
+ * duplicate ghosts repeated scrapes created. Games fold into the kept ghost and
+ * de-duplicate. Recompute is unnecessary (ghost games are excluded from ratings),
+ * but revalidate the pages whose counts change.
+ */
+export async function mergeDuplicateGhostsAction(): Promise<ActionState> {
+  await requireAdmin();
+  const { groups, removed } = await mergeDuplicateGhosts();
+  revalidatePath("/admin/ghosts");
+  revalidatePath("/admin/duplicates");
+  revalidatePath("/admin/audit");
+  revalidatePath("/");
+  return removed > 0
+    ? {
+        ok: true,
+        message: `Merged ${removed} duplicate ghost${removed === 1 ? "" : "s"} across ${groups} name group${groups === 1 ? "" : "s"}.`,
+      }
+    : { ok: true, message: "No duplicate ghosts found." };
 }
 
 /** Scrape every just-added (never-scraped) team, then recompute — the manual

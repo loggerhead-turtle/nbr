@@ -347,22 +347,28 @@ async function resolveOpponent(rawName: string): Promise<string> {
   const firstToken = normalized.split(" ")[0] ?? normalized;
   const candidates = await prisma.team.findMany({
     where: { name: { contains: firstToken, mode: "insensitive" } },
-    select: { id: true, name: true, ageGroup: true },
+    select: { id: true, name: true, ageGroup: true, isGhost: true },
     take: 50,
   });
   const sameName = candidates.filter((c) => normalizeTeamName(c.name) === normalized);
+  const ageOfCand = (c: (typeof sameName)[number]) =>
+    ageNum(c.ageGroup) ?? ageNum(ageGroupFromName(c.name));
 
   if (oppAge != null) {
     // Opponent states an age — only ever match a team of that same age.
-    const match = sameName.find(
-      (c) => (ageNum(c.ageGroup) ?? ageNum(ageGroupFromName(c.name))) === oppAge,
-    );
+    const match = sameName.find((c) => ageOfCand(c) === oppAge);
     if (match) return match.id;
   } else if (sameName.length === 1) {
     // No stated age and exactly one same-name team — unambiguous, so match it.
     return sameName[0]!.id;
   }
-  // (No age + multiple same-name teams ⇒ ambiguous ⇒ fall through to a ghost.)
+
+  // Before creating a ghost, REUSE an existing same-name ghost of this age
+  // (age-less matches age-less). Without this, an age-less opponent that is
+  // "ambiguous" among 2+ same-name teams would spawn a NEW ghost on every scrape,
+  // multiplying duplicate ghosts each re-scrape.
+  const ghostTwin = sameName.find((c) => c.isGhost && (ageOfCand(c) ?? null) === (oppAge ?? null));
+  if (ghostTwin) return ghostTwin.id;
 
   // Create a ghost team (unverified) so the game still contributes to ratings.
   let slug = teamSlug(rawName);
