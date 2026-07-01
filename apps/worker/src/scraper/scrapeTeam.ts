@@ -158,7 +158,10 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
     // teams are created with a "UT" default, so a NV/CA/etc. team would otherwise
     // stay mislabeled (e.g. "Henderson, UT"). Correct it whenever the page's
     // state differs from what we have.
-    if (header.state && header.state !== t.state) data.state = header.state;
+    if (header.state && header.state !== t.state) {
+      data.state = header.state;
+      console.log(`[scrape] ${teamId}: corrected state ${t.state} → ${header.state}`);
+    }
   }
 
   // Coaching staff from the team's own page powers merge-confidence scoring.
