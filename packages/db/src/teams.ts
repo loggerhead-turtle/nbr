@@ -1486,12 +1486,13 @@ export async function mergeDuplicateGhosts(): Promise<{ groups: number; removed:
         (a.createdAt < b.createdAt ? -1 : 1),
     );
     const keep = list[0]!;
-    for (const dup of list.slice(1)) {
-      await prisma.game.updateMany({ where: { homeTeamId: dup.id }, data: { homeTeamId: keep.id } });
-      await prisma.game.updateMany({ where: { awayTeamId: dup.id }, data: { awayTeamId: keep.id } });
-      await prisma.team.delete({ where: { id: dup.id } });
-      removed += 1;
-    }
+    const dupIds = list.slice(1).map((d) => d.id);
+    // Batch per group (3 queries + one dedupe) instead of per duplicate, so this
+    // scales to thousands of ghosts without timing out.
+    await prisma.game.updateMany({ where: { homeTeamId: { in: dupIds } }, data: { homeTeamId: keep.id } });
+    await prisma.game.updateMany({ where: { awayTeamId: { in: dupIds } }, data: { awayTeamId: keep.id } });
+    await prisma.team.deleteMany({ where: { id: { in: dupIds } } });
+    removed += dupIds.length;
     await dedupeTeamGames(keep.id);
   }
   return { groups: groupCount, removed };

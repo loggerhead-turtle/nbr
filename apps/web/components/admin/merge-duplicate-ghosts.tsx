@@ -1,32 +1,28 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { mergeDuplicateGhostsAction, type ActionState } from "@/lib/admin-actions";
+import { cleanGhostsAction, type ActionState } from "@/lib/admin-actions";
 
 /**
- * Collapse duplicate ghost teams (same name + age) into one. These pile up when a
- * team is scraped repeatedly and an age-less opponent keeps spawning a fresh
- * ghost — the cause of the duplicate-count blow-up. Games fold into the kept
- * ghost and de-duplicate; nothing real is touched.
+ * Clean up ghosts: merge duplicate ghosts (same name + age) into one AND delete
+ * empty ones. Runs as a BACKGROUND job so it scales to thousands of ghosts
+ * without timing out. Safe — only ghosts are touched.
  */
 export function MergeDuplicateGhosts() {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<ActionState | null>(null);
 
   const run = () => {
     if (
       !window.confirm(
-        "Merge duplicate ghost teams (same name + age) into one?\n\n" +
-          "Games fold into the kept ghost and de-duplicate. Safe — only ghosts are touched.",
+        "Clean up ghosts now?\n\n" +
+          "Merges duplicate ghosts (same name + age) into one and deletes empty ghosts. " +
+          "Runs in the background; safe — only ghosts are touched.",
       )
     )
       return;
     startTransition(async () => {
-      const r = await mergeDuplicateGhostsAction();
-      setMsg(r);
-      router.refresh();
+      setMsg(await cleanGhostsAction());
     });
   };
 
@@ -35,10 +31,10 @@ export function MergeDuplicateGhosts() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-700">
           Repeated scrapes can create <strong>duplicate ghosts</strong> of the same opponent —
-          collapse them into one.
+          merge them and remove empties (runs in the background).
         </p>
         <button onClick={run} disabled={pending} className="btn-primary disabled:opacity-50">
-          {pending ? "Merging…" : "Merge duplicate ghosts"}
+          {pending ? "Starting…" : "Clean up ghosts"}
         </button>
       </div>
       {msg?.message && <p className="mt-1 text-xs font-medium text-emerald-700">{msg.message}</p>}
