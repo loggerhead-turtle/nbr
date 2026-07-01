@@ -276,22 +276,32 @@ async function upsertGame(teamId: string, g: ParsedGame): Promise<boolean> {
     }
   }
 
-  // 2. Same matchup, same day (either orientation) already stored? Update it and
-  //    backfill the gcGameId if it's missing, so a per-team UUID doesn't create a
-  //    cross-team duplicate (the opponent's scrape has a DIFFERENT uuid for this
-  //    same game).
+  // 2. This team already has a game that day against an opponent of the SAME NAME
+  //    — even if that opponent resolved to a different record (a real team vs a
+  //    ghost twin of it, or two duplicate ghosts). Matching by opponent NAME (not
+  //    record id) stops the same real game being stored twice with each side's
+  //    slightly different score. Backfill the gcGameId if we now have one.
   const dayStart = new Date(playedAt);
   dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(playedAt);
   dayEnd.setHours(23, 59, 59, 999);
-  const dup = await prisma.game.findFirst({
+  const oppNorm = normalizeTeamName(g.opponentName);
+  const sameDay = await prisma.game.findMany({
     where: {
       playedAt: { gte: dayStart, lte: dayEnd },
-      OR: [
-        { homeTeamId, awayTeamId },
-        { homeTeamId: awayTeamId, awayTeamId: homeTeamId },
-      ],
+      OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }],
     },
+    select: {
+      id: true,
+      gcGameId: true,
+      homeTeamId: true,
+      homeTeam: { select: { name: true } },
+      awayTeam: { select: { name: true } },
+    },
+  });
+  const dup = sameDay.find((row) => {
+    const opp = row.homeTeamId === teamId ? row.awayTeam : row.homeTeam;
+    return normalizeTeamName(opp.name) === oppNorm;
   });
   if (dup) {
     if (g.gcGameId && !dup.gcGameId) {
