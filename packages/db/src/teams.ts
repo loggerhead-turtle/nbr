@@ -1445,3 +1445,54 @@ export async function getUnverifiedOpponents(teamId: string): Promise<TeamOppone
     opponents,
   };
 }
+
+/**
+ * Merge duplicate GHOST teams — same normalized name + same age (age-less groups
+ * with age-less) — into one, keeping isGhost. Cleans up the duplicate ghosts that
+ * repeated scrapes created before resolveOpponent reused age-less ghosts. Games
+ * are reassigned to the kept ghost and de-duplicated. Returns how many groups had
+ * duplicates and how many ghost rows were removed.
+ */
+export async function mergeDuplicateGhosts(): Promise<{ groups: number; removed: number }> {
+  const ghosts = await prisma.team.findMany({
+    where: { isGhost: true },
+    select: {
+      id: true,
+      name: true,
+      ageGroup: true,
+      createdAt: true,
+      _count: { select: { homeGames: true, awayGames: true } },
+    },
+  });
+
+  const groups = new Map<string, typeof ghosts>();
+  for (const g of ghosts) {
+    const norm = normalizeTeamName(g.name);
+    if (!norm) continue;
+    const age = ageToNum(g.ageGroup ?? ageGroupFromName(g.name));
+    const key = `${norm}|${age ?? ""}`;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(g);
+  }
+
+  let groupCount = 0;
+  let removed = 0;
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    groupCount += 1;
+    // Keep the ghost with the most games (then the oldest); fold the rest in.
+    list.sort(
+      (a, b) =>
+        b._count.homeGames + b._count.awayGames - (a._count.homeGames + a._count.awayGames) ||
+        (a.createdAt < b.createdAt ? -1 : 1),
+    );
+    const keep = list[0]!;
+    for (const dup of list.slice(1)) {
+      await prisma.game.updateMany({ where: { homeTeamId: dup.id }, data: { homeTeamId: keep.id } });
+      await prisma.game.updateMany({ where: { awayTeamId: dup.id }, data: { awayTeamId: keep.id } });
+      await prisma.team.delete({ where: { id: dup.id } });
+      removed += 1;
+    }
+    await dedupeTeamGames(keep.id);
+  }
+  return { groups: groupCount, removed };
+}

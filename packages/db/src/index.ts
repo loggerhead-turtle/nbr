@@ -24,6 +24,7 @@ export {
   mergeTeams,
   dedupeTeamGames,
   dedupeAllGames,
+  mergeDuplicateGhosts,
   findCrossAgeMergeArtifacts,
   repairCrossAgeMerge,
   getGhostTeamsWithSuggestions,
