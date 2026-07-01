@@ -7,7 +7,7 @@
  */
 import { prisma } from "@nbr/db";
 import { runScrape } from "./scraper/runScrape.js";
-import { runScrapeOne, runScrapeNew } from "./scraper/runScrapeOne.js";
+import { runScrapeOne, runScrapeNew, runScrapeAll } from "./scraper/runScrapeOne.js";
 import { runMaxPreps } from "./scraper/runMaxPreps.js";
 import { runGeocode } from "./scraper/runGeocode.js";
 import { runReconcile } from "./scraper/runReconcile.js";
@@ -30,6 +30,9 @@ async function main() {
       break;
     case "scrape-new":
       await runScrapeNew();
+      break;
+    case "scrape-all":
+      await runScrapeAll();
       break;
     case "maxpreps":
       await runMaxPreps();

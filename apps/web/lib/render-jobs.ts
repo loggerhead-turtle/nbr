@@ -69,6 +69,11 @@ export async function triggerScrapeNew(): Promise<boolean> {
   return postJob("pnpm --filter @nbr/worker scrape-new");
 }
 
+/** Full re-scrape of every scrapeable team, then recompute (deliberate one-off). */
+export async function triggerRescrapeAll(): Promise<boolean> {
+  return postJob("pnpm --filter @nbr/worker scrape-all");
+}
+
 /** Recompute all ratings (e.g. after an admin repairs/merges teams). */
 export async function triggerRecompute(): Promise<boolean> {
   return postJob("pnpm --filter @nbr/worker recompute");

@@ -41,7 +41,12 @@ import {
 import { AGE_OFFSETS_KEY } from "./age-offset";
 import { LIVE_SEARCH_KEY } from "./site-settings";
 import { mergeTeams } from "./teams";
-import { triggerScrapeTeam, triggerScrapeNew, triggerRecompute } from "./render-jobs";
+import {
+  triggerScrapeTeam,
+  triggerScrapeNew,
+  triggerRescrapeAll,
+  triggerRecompute,
+} from "./render-jobs";
 import type { MergeTargetOption } from "./merge-types";
 import {
   markActivitySeen,
@@ -902,6 +907,29 @@ export async function rescrapeRecentAction(): Promise<ActionState> {
     ? { ok: true, message: `Re-scraping ${res.count} recent team(s) to fix locations — check back shortly.` }
     : {
         error: `Reset ${res.count} team(s), but couldn't start the scrape job (RENDER_API_KEY / RENDER_WORKER_SERVICE_ID not set).`,
+      };
+}
+
+/**
+ * Kick a full re-scrape of every scrapeable team — a deliberate one-off, e.g. to
+ * backfill new fields (season/record/game UUIDs) across the whole population.
+ * Long-running; unrelated to the on-add scrape.
+ */
+export async function rescrapeAllAction(): Promise<ActionState> {
+  await requireAdmin();
+  const eligible = await prisma.team.count({
+    where: { scrapeEnabled: true, gcTeamId: { not: null } },
+  });
+  if (eligible === 0) return { error: "No scrapeable teams (need a GameChanger ID)." };
+  const sent = await triggerRescrapeAll();
+  return sent
+    ? {
+        ok: true,
+        message: `Full re-scrape started for ${eligible} team${eligible === 1 ? "" : "s"} — this runs a while; check the nbr-scraper job logs.`,
+      }
+    : {
+        error:
+          "Couldn't start the job. Set RENDER_API_KEY and RENDER_WORKER_SERVICE_ID (see server logs).",
       };
 }
 

@@ -1,5 +1,6 @@
 import { GcLookupContent } from "@/components/admin/gc-lookup-content";
 import { RescrapeRecentButton } from "@/components/admin/rescrape-recent-button";
+import { RescrapeAllButton } from "@/components/admin/rescrape-all-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "GameChanger lookup", robots: { index: false } };
@@ -11,6 +12,15 @@ export default async function GcLookupPage({
 }) {
   const sp = await searchParams;
   return (
-    <GcLookupContent basePath="/admin/gc-lookup" sp={sp} headerExtra={<RescrapeRecentButton />} />
+    <GcLookupContent
+      basePath="/admin/gc-lookup"
+      sp={sp}
+      headerExtra={
+        <div className="flex flex-wrap items-center gap-3">
+          <RescrapeRecentButton />
+          <RescrapeAllButton />
+        </div>
+      }
+    />
   );
 }
