@@ -3,7 +3,14 @@
  * Records a ScrapeJob and updates the team's scrape bookkeeping. Never throws to
  * the caller — failures are captured in the returned status.
  */
-import { prisma, ScrapeStatus, AgeGroup, findAutoMergeTarget, mergeTeams } from "@nbr/db";
+import {
+  prisma,
+  ScrapeStatus,
+  AgeGroup,
+  findAutoMergeTarget,
+  mergeTeams,
+  refreshTeamPendingMerge,
+} from "@nbr/db";
 import { normalizeTeamName, teamSlug, ageGroupFromName, geocodeCity } from "@nbr/core";
 import type { BrowserContext } from "playwright";
 import { openSchedule, pageDiagnostics } from "./browser.js";
@@ -201,6 +208,13 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
           `(confidence ${auto.score.score}, ${auto.score.reasons.join("; ")})`,
       );
     }
+  }
+
+  // A newly named team may now have a confident ghost twin awaiting review —
+  // set/clear its "Verifying" flag so the public badge stays in step with the
+  // Merge queue. (No-op unless the name changed this run.)
+  if (doFullEnrich) {
+    await refreshTeamPendingMerge(teamId).catch(() => {});
   }
 }
 

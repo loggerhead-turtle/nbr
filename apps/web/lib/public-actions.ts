@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@nbr/db";
 import { createTeamSchema, teamSlug } from "@nbr/core";
+import { refreshTeamPendingMerge } from "@nbr/db";
 import { triggerScrapeTeam } from "./render-jobs";
 import { getCurrentSeasonYear } from "./season";
 import type { ActionState } from "./admin-actions";
@@ -55,7 +56,7 @@ export async function submitTeamAction(
   // reviews any strong ghost match on the Merge queue before the games are folded
   // in, so a mistaken match can't silently contaminate ratings.
   const slug = await uniqueSlug(teamSlug(data.name, data.ageGroup));
-  await prisma.team.create({
+  const team = await prisma.team.create({
     data: {
       name: data.name,
       gcTeamId: data.gcTeamId ?? null,
@@ -68,6 +69,9 @@ export async function submitTeamAction(
       rating: { create: {} },
     },
   });
+
+  // Flag "Verifying" if a confident ghost match is already waiting for review.
+  await refreshTeamPendingMerge(team.id).catch(() => {});
 
   if (data.gcTeamId) await triggerScrapeTeam(data.gcTeamId);
   revalidatePath("/");

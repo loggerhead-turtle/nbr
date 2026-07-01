@@ -1048,6 +1048,159 @@ async function getGhostMergeDismissals(): Promise<Set<string>> {
   }
 }
 
+/** Prisma select for a real team being matched against ghosts (queue + refresh). */
+const QUEUE_TEAM_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  ageGroup: true,
+  city: true,
+  state: true,
+  gcTeamId: true,
+  coaches: true,
+  createdAt: true,
+  _count: { select: { homeGames: true, awayGames: true } },
+} as const;
+
+type QueueTeamRow = {
+  id: string;
+  name: string;
+  slug: string;
+  ageGroup: string | null;
+  city: string | null;
+  state: string;
+  gcTeamId: string | null;
+  coaches: string[];
+  createdAt: Date;
+  _count: { homeGames: number; awayGames: number };
+};
+
+/**
+ * The single best confident, un-dismissed ghost match for one real team, fully
+ * scored (name, age, city/state, coaches, shared games, region) — or null when
+ * there's no confident, age-compatible, non-dismissed candidate. Shared by the
+ * queue (loop over teams) and the per-team pendingMerge refresh so both agree.
+ */
+async function bestGhostMatchForTeam(
+  t: QueueTeamRow,
+  dismissed: Set<string>,
+  newCutoff: number,
+): Promise<GhostMergeQueueItem | null> {
+  const norm = normalizeTeamName(t.name);
+  if (!norm) return null;
+  const firstToken = norm.split(" ")[0] ?? norm;
+
+  const ghosts = await prisma.team.findMany({
+    where: { isGhost: true, name: { contains: firstToken, mode: "insensitive" } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      ageGroup: true,
+      city: true,
+      state: true,
+      coaches: true,
+      _count: { select: { homeGames: true, awayGames: true } },
+    },
+    take: 25,
+  });
+  if (ghosts.length === 0) return null;
+
+  // Cheap first pass (no game queries) to pick the single ghost worth refining.
+  const prelim = ghosts
+    .map((g) => ({
+      g,
+      cheap: scoreMerge({
+        nameA: t.name,
+        nameB: g.name,
+        ageA: t.ageGroup ?? ageGroupFromName(t.name),
+        ageB: g.ageGroup ?? ageGroupFromName(g.name),
+        cityA: t.city,
+        cityB: g.city,
+        stateA: t.city ? t.state : null,
+        stateB: g.city ? g.state : null,
+        coachesA: t.coaches,
+        coachesB: g.coaches,
+      }),
+    }))
+    .filter((x) => !x.cheap.disqualified && x.cheap.tier !== "none")
+    .sort((a, b) => b.cheap.score - a.cheap.score);
+  if (prelim.length === 0) return null;
+  const g = prelim[0]!.g;
+
+  const dismissKey = `${g.id}|${t.id}`;
+  if (dismissed.has(dismissKey)) return null;
+
+  const [sharedGames, ghostRegion, targetRegion] = await Promise.all([
+    sharedGamesByName(g.id, t.id),
+    teamRegionStates(g.id, t.id),
+    teamRegionStates(t.id, g.id),
+  ]);
+  const score = scoreMerge({
+    nameA: t.name,
+    nameB: g.name,
+    ageA: t.ageGroup ?? ageGroupFromName(t.name),
+    ageB: g.ageGroup ?? ageGroupFromName(g.name),
+    cityA: t.city,
+    cityB: g.city,
+    stateA: t.city ? t.state : null,
+    stateB: g.city ? g.state : null,
+    coachesA: t.coaches,
+    coachesB: g.coaches,
+    sharedGameCount: sharedGames.length,
+    regionStatesA: targetRegion,
+    regionStatesB: ghostRegion,
+  });
+  // Only confident, age-compatible matches belong in a review queue.
+  if (score.disqualified) return null;
+  if (score.tier !== "high" && score.tier !== "medium") return null;
+
+  return {
+    ghost: {
+      id: g.id,
+      name: g.name,
+      slug: g.slug,
+      ageGroup: g.ageGroup,
+      city: g.city,
+      state: g.state,
+      totalGames: g._count.homeGames + g._count.awayGames,
+    },
+    target: {
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      city: t.city,
+      state: t.state,
+      gcTeamId: t.gcTeamId,
+      createdAt: t.createdAt.toISOString(),
+      isNew: t.createdAt.getTime() >= newCutoff,
+      totalGames: t._count.homeGames + t._count.awayGames,
+    },
+    score,
+    sharedGames,
+    dismissKey,
+  };
+}
+
+/**
+ * Recompute one team's `pendingMerge` flag from the live queue logic and persist
+ * it. Call after adding a team, or after a merge/dismiss, so the public
+ * "Verifying" badge appears/clears in step with the queue. Returns the new value.
+ */
+export async function refreshTeamPendingMerge(teamId: string): Promise<boolean> {
+  const t = (await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { ...QUEUE_TEAM_SELECT, isGhost: true },
+  })) as (QueueTeamRow & { isGhost: boolean }) | null;
+  // Ghosts are never public targets; a missing team is a no-op.
+  const match = t && !t.isGhost ? await bestGhostMatchForTeam(t, await getGhostMergeDismissals(), 0) : null;
+  const pending = match != null;
+  if (t) {
+    await prisma.team.update({ where: { id: teamId }, data: { pendingMerge: pending } });
+  }
+  return pending;
+}
+
 /**
  * Build the merge review queue: for the most recently added REAL teams, find the
  * single best-matching ghost and, when the match is confident (tier high/medium
@@ -1065,120 +1218,17 @@ export async function getGhostMergeQueue(opts?: {
   const newCutoff = Date.now() - newWithinDays * 24 * 60 * 60 * 1000;
   const dismissed = opts?.includeDismissed ? new Set<string>() : await getGhostMergeDismissals();
 
-  const teams = await prisma.team.findMany({
+  const teams = (await prisma.team.findMany({
     where: { isGhost: false },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      ageGroup: true,
-      city: true,
-      state: true,
-      gcTeamId: true,
-      coaches: true,
-      createdAt: true,
-      _count: { select: { homeGames: true, awayGames: true } },
-    },
+    select: QUEUE_TEAM_SELECT,
     orderBy: { createdAt: "desc" },
     take: limit,
-  });
+  })) as QueueTeamRow[];
 
   const items: GhostMergeQueueItem[] = [];
   for (const t of teams) {
-    const norm = normalizeTeamName(t.name);
-    if (!norm) continue;
-    const firstToken = norm.split(" ")[0] ?? norm;
-
-    const ghosts = await prisma.team.findMany({
-      where: { isGhost: true, name: { contains: firstToken, mode: "insensitive" } },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        ageGroup: true,
-        city: true,
-        state: true,
-        coaches: true,
-        _count: { select: { homeGames: true, awayGames: true } },
-      },
-      take: 25,
-    });
-    if (ghosts.length === 0) continue;
-
-    // Cheap first pass (no game queries) to pick the single ghost worth refining.
-    const prelim = ghosts
-      .map((g) => ({
-        g,
-        cheap: scoreMerge({
-          nameA: t.name,
-          nameB: g.name,
-          ageA: t.ageGroup ?? ageGroupFromName(t.name),
-          ageB: g.ageGroup ?? ageGroupFromName(g.name),
-          cityA: t.city,
-          cityB: g.city,
-          stateA: t.city ? t.state : null,
-          stateB: g.city ? g.state : null,
-          coachesA: t.coaches,
-          coachesB: g.coaches,
-        }),
-      }))
-      .filter((x) => !x.cheap.disqualified && x.cheap.tier !== "none")
-      .sort((a, b) => b.cheap.score - a.cheap.score);
-    if (prelim.length === 0) continue;
-    const g = prelim[0]!.g;
-
-    const [sharedGames, ghostRegion, targetRegion] = await Promise.all([
-      sharedGamesByName(g.id, t.id),
-      teamRegionStates(g.id, t.id),
-      teamRegionStates(t.id, g.id),
-    ]);
-    const score = scoreMerge({
-      nameA: t.name,
-      nameB: g.name,
-      ageA: t.ageGroup ?? ageGroupFromName(t.name),
-      ageB: g.ageGroup ?? ageGroupFromName(g.name),
-      cityA: t.city,
-      cityB: g.city,
-      stateA: t.city ? t.state : null,
-      stateB: g.city ? g.state : null,
-      coachesA: t.coaches,
-      coachesB: g.coaches,
-      sharedGameCount: sharedGames.length,
-      regionStatesA: targetRegion,
-      regionStatesB: ghostRegion,
-    });
-    // Only confident, age-compatible matches belong in a review queue.
-    if (score.disqualified) continue;
-    if (score.tier !== "high" && score.tier !== "medium") continue;
-
-    const dismissKey = `${g.id}|${t.id}`;
-    if (dismissed.has(dismissKey)) continue;
-
-    items.push({
-      ghost: {
-        id: g.id,
-        name: g.name,
-        slug: g.slug,
-        ageGroup: g.ageGroup,
-        city: g.city,
-        state: g.state,
-        totalGames: g._count.homeGames + g._count.awayGames,
-      },
-      target: {
-        id: t.id,
-        name: t.name,
-        slug: t.slug,
-        city: t.city,
-        state: t.state,
-        gcTeamId: t.gcTeamId,
-        createdAt: t.createdAt.toISOString(),
-        isNew: t.createdAt.getTime() >= newCutoff,
-        totalGames: t._count.homeGames + t._count.awayGames,
-      },
-      score,
-      sharedGames,
-      dismissKey,
-    });
+    const match = await bestGhostMatchForTeam(t, dismissed, newCutoff);
+    if (match) items.push(match);
   }
 
   // New arrivals first, then strongest match first.

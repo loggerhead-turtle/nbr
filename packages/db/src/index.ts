@@ -36,6 +36,7 @@ export {
   reassignTeamGames,
   getGhostDetail,
   getGhostMergeQueue,
+  refreshTeamPendingMerge,
   GHOST_MERGE_DISMISSALS_KEY,
 } from "./teams";
 export type {

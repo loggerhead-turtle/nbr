@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { TeamMedallion } from "@/components/team-medallion";
 import { TierBadge } from "@/components/tier-badge";
-import { ProvisionalBadge, GhostBadge } from "@/components/badges";
+import { ProvisionalBadge, GhostBadge, VerifyingBadge } from "@/components/badges";
 import { teamMedallion } from "@/lib/medallion";
 import { formatRating, formatRecord, ageGroupLabel } from "@/lib/format";
 import type { RatingRow } from "@/lib/queries";
@@ -61,6 +61,7 @@ export function RatingsTable({
   const SortLink = ({ label, col }: { label: string; col: SortCol }) => (
     <Link
       href={sortHref(col)}
+      scroll={false}
       className={`inline-flex items-center gap-1 hover:text-white ${sort === col ? "text-white" : ""}`}
     >
       {label}
@@ -79,6 +80,7 @@ export function RatingsTable({
         <span className="shrink-0 text-xs font-medium text-slate-500">Sort:</span>
         <Link
           href={sortHref("rating")}
+          scroll={false}
           onClick={() => setMetric("rating")}
           className={`flex-1 text-center ${sort === "rating" ? "btn-accent" : "btn-ghost"}`}
         >
@@ -86,6 +88,7 @@ export function RatingsTable({
         </Link>
         <Link
           href={sortHref("games")}
+          scroll={false}
           onClick={() => setMetric("games")}
           className={`flex-1 text-center ${sort === "games" ? "btn-accent" : "btn-ghost"}`}
         >
@@ -151,6 +154,7 @@ export function RatingsTable({
                         · {r.classification ? `Varsity ${r.classification}` : ageGroupLabel(r.ageGroup)}
                       </span>
                       {r.isProvisional && <ProvisionalBadge />}
+                      {r.verifying && <VerifyingBadge />}
                       {r.isGhost && <GhostBadge />}
                     </div>
                   </td>

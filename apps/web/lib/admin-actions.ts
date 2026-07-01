@@ -13,6 +13,7 @@ import {
   deleteOrphanGhosts,
   getGhostSplitGroups,
   reassignTeamGames,
+  refreshTeamPendingMerge,
   GHOST_MERGE_DISMISSALS_KEY,
   type GhostSplitGroup,
 } from "@nbr/db";
@@ -174,6 +175,11 @@ export async function createTeamAction(
       rating: { create: {} },
     },
   });
+
+  // Flag a "Verifying" state if this new team already has a confident ghost
+  // match awaiting review — its games still count, and the badge clears when the
+  // match is approved/dismissed on the Merge queue.
+  await refreshTeamPendingMerge(team.id).catch(() => {});
 
   if (team.gcTeamId) await triggerScrapeTeam(team.gcTeamId);
   revalidatePath("/");
@@ -482,6 +488,8 @@ export async function mergeGhostAction(formData: FormData): Promise<void> {
   if (!ghostId || !targetId || ghostId === targetId) return;
   // The ghost (source) folds into the real team (target), which keeps its id.
   await mergeTeams(ghostId, targetId);
+  // The target may still have another pending match, or none — recompute its flag.
+  await refreshTeamPendingMerge(targetId).catch(() => {});
   revalidatePath("/admin/ghosts");
   revalidatePath("/admin/merge-queue");
   revalidatePath("/admin/duplicates");
@@ -510,10 +518,14 @@ export async function dismissGhostMergeAction(formData: FormData): Promise<void>
       create: { key: GHOST_MERGE_DISMISSALS_KEY, value: JSON.stringify([...set]) },
       update: { value: JSON.stringify([...set]) },
     });
+    // Clear the target's "Verifying" badge if this was its only pending match.
+    const targetId = key.slice(key.indexOf("|") + 1);
+    if (targetId) await refreshTeamPendingMerge(targetId).catch(() => {});
   } catch {
     // ignore — dismissing is best-effort
   }
   revalidatePath("/admin/merge-queue");
+  revalidatePath("/");
 }
 
 /**

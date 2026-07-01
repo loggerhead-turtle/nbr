@@ -117,6 +117,11 @@ model Team {
   // Set when a team was quick-added by GameChanger ID only; the scraper fills in
   // the real name/city/age group from the team's page on its first run.
   needsEnrichment Boolean @default(false)
+  // Set when the team has a confident, un-dismissed ghost match awaiting review
+  // on the Merge queue. Its games still count in ratings; the public "Verifying"
+  // badge flags that the record may gain games once an admin approves the merge.
+  // Cleared when the match is approved (merged) or dismissed.
+  pendingMerge    Boolean @default(false)
 
   // Cross-season succession: most clubs register a NEW GameChanger team each
   // season (13U → 14U). The new season-team points to the prior one so its

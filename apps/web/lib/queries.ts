@@ -25,6 +25,9 @@ export interface RatingRow {
   losses: number;
   ties: number;
   isProvisional: boolean;
+  /** Team has a confident ghost match awaiting admin review on the Merge queue —
+   * its record may gain games once approved. Drives the "Verifying" badge. */
+  verifying: boolean;
   /** Competitive tier (within division), null if provisional or too few teams. */
   tier: NbrTier | null;
 }
@@ -138,6 +141,7 @@ export async function getRatings(q: RatingsQuery = {}): Promise<{
         losses: t.rating!.losses,
         ties: t.rating!.ties,
         isProvisional: t.rating!.isProvisional,
+        verifying: t.pendingMerge,
         tier: tierFor(t.rating!.rating, t.rating!.isProvisional),
       }));
 
