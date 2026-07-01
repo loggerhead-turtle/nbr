@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "scrape": "tsx src/index.ts scrape",
+    "scrape-one": "tsx src/index.ts scrape-one",
+    "scrape-new": "tsx src/index.ts scrape-new",
+    "clean-ghosts": "tsx src/index.ts clean-ghosts",
     "maxpreps": "tsx src/index.ts maxpreps",
     "geocode": "tsx src/index.ts geocode",
     "reconcile": "tsx src/index.ts reconcile",
