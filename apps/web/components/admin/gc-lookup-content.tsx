@@ -1,8 +1,10 @@
 import Link from "next/link";
-import { getLookupTeams, getLookupStates, getUnverifiedOpponents } from "@nbr/db";
+import { getLookupTeams, getLookupStates, getUnverifiedOpponents, getScraperStats } from "@nbr/db";
 import { AGE_GROUPS } from "@nbr/core";
 import { GcLookupSearch, UnverifiedOpponentList, StickyAddTeams } from "./gc-lookup";
+import { EarningsBar } from "./earnings-bar";
 import { ageGroupLabel } from "@/lib/format";
+import { getCurrentUser } from "@/lib/user-auth";
 
 /**
  * Shared GameChanger-lookup UI, used by both the admin page and the limited
@@ -21,11 +23,14 @@ export async function GcLookupContent({
   const state = sp.state?.trim().toUpperCase() || undefined;
   const selectedId = sp.team || undefined;
 
-  const [teams, states, view] = await Promise.all([
+  const user = await getCurrentUser();
+  const [teams, states, view, stats] = await Promise.all([
     getLookupTeams({ q, ageGroup: age, state }),
     getLookupStates(),
     selectedId ? getUnverifiedOpponents(selectedId) : Promise.resolve(null),
+    user ? getScraperStats(user.id) : Promise.resolve(null),
   ]);
+  const leaderboardHref = basePath.startsWith("/staff") ? "/staff/leaderboard" : "/admin/scraper-pay";
 
   const teamHref = (id: string) => {
     const params = new URLSearchParams();
@@ -46,6 +51,8 @@ export async function GcLookupContent({
         floating box). Teams are ranked by how many unverified opponents they still have. Filter by
         age or state to focus.
       </p>
+
+      {stats && <EarningsBar stats={stats} leaderboardHref={leaderboardHref} />}
 
       <div className="mb-5">
         <GcLookupSearch

@@ -62,3 +62,22 @@ export type {
   UnverifiedOpponent,
   TeamOpponentsView,
 } from "./teams";
+export {
+  SCRAPE_RATE_KEY,
+  SCRAPE_GOALS_KEY,
+  getScrapePayRateCents,
+  setScrapePayRateCents,
+  getScrapeGoals,
+  setScrapeGoals,
+  recordScrapeCredits,
+  getScraperStats,
+  getScraperLeaderboard,
+  recordPayout,
+} from "./scrape-credits";
+export type {
+  ScrapeGoals,
+  PeriodStat,
+  ScraperStats,
+  LeaderboardRow,
+  PayoutResult,
+} from "./scrape-credits";

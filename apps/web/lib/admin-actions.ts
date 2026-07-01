@@ -15,6 +15,11 @@ import {
   reassignTeamGames,
   refreshTeamPendingMerge,
   dedupeAllGames,
+  getScrapePayRateCents,
+  setScrapePayRateCents,
+  setScrapeGoals,
+  recordScrapeCredits,
+  recordPayout,
   GHOST_MERGE_DISMISSALS_KEY,
   type GhostSplitGroup,
 } from "@nbr/db";
@@ -55,7 +60,8 @@ import {
   createSessionToken,
   isAdmin,
 } from "./auth";
-import { isCurrentUserScraper } from "./user-auth";
+import { isCurrentUserScraper, getCurrentUser } from "./user-auth";
+import { formatUsd } from "./format";
 
 export interface ActionState {
   ok?: boolean;
@@ -206,9 +212,9 @@ export async function quickAddTeamsAction(
   const tokens = raw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
   if (tokens.length === 0) return { error: "Paste at least one GameChanger team ID." };
 
-  let added = 0;
   let skipped = 0;
   const invalid: string[] = [];
+  const created: { teamId: string; gcTeamId: string }[] = [];
   const seasonYear = (await getCurrentSeasonYear()) ?? undefined;
 
   for (const token of tokens) {
@@ -224,7 +230,7 @@ export async function quickAddTeamsAction(
       continue;
     }
     const slug = await uniqueSlug(`gc-${gcTeamId.toLowerCase()}`);
-    await prisma.team.create({
+    const team = await prisma.team.create({
       data: {
         name: `Unnamed team (${gcTeamId})`,
         gcTeamId,
@@ -235,13 +241,29 @@ export async function quickAddTeamsAction(
         seasonYear,
         rating: { create: {} },
       },
+      select: { id: true },
     });
-    added += 1;
+    created.push({ teamId: team.id, gcTeamId });
+  }
+
+  const added = created.length;
+
+  // Credit the signed-in scraper for each NEW team, at the current pay rate, so
+  // their live earnings update after each submit.
+  let earnedCents = 0;
+  const user = await getCurrentUser();
+  if (user && added > 0) {
+    const rateCents = await getScrapePayRateCents();
+    await recordScrapeCredits(user.id, created, rateCents).catch(() => 0);
+    earnedCents = added * rateCents;
   }
 
   if (added > 0) await triggerScrapeNew();
   revalidatePath("/admin/teams");
+  revalidatePath("/admin/gc-lookup");
+  revalidatePath("/staff/gc-lookup");
   const parts = [`Added ${added} team${added === 1 ? "" : "s"}`];
+  if (earnedCents > 0) parts.push(`+${formatUsd(earnedCents)}`);
   if (skipped) parts.push(`${skipped} already present`);
   if (invalid.length) parts.push(`${invalid.length} invalid (${invalid.slice(0, 3).join(", ")})`);
   return {
@@ -663,6 +685,37 @@ export async function setUserRoleAction(formData: FormData): Promise<void> {
     data: { role: role as "ADMIN" | "USER" | "GAME_SCRAPER" },
   });
   revalidatePath("/admin/users");
+}
+
+/** Save the game-scraper pay rate (cents/team) and period goals (teams). */
+export async function setScrapePayAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const rate = Number(formData.get("rateCents"));
+  if (Number.isFinite(rate) && rate >= 0) await setScrapePayRateCents(Math.round(rate));
+  await setScrapeGoals({
+    daily: Number(formData.get("daily")) || 0,
+    weekly: Number(formData.get("weekly")) || 0,
+    monthly: Number(formData.get("monthly")) || 0,
+  });
+  revalidatePath("/admin/scraper-pay");
+  revalidatePath("/admin/gc-lookup");
+  revalidatePath("/staff/gc-lookup");
+  revalidatePath("/staff/leaderboard");
+  return { ok: true, message: "Saved." };
+}
+
+/** Mark a scraper paid through now — banks unpaid credits and resets their
+ * "since last pay period" to zero. */
+export async function markScraperPaidAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) return;
+  await recordPayout(userId);
+  revalidatePath("/admin/scraper-pay");
+  revalidatePath("/staff/leaderboard");
 }
 
 export async function setTdStatusAction(formData: FormData): Promise<void> {

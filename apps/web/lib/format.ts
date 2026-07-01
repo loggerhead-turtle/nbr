@@ -19,6 +19,11 @@ export function formatRecord(w: number, l: number, t: number): string {
   return t > 0 ? `${w}-${l}-${t}` : `${w}-${l}`;
 }
 
+/** Cents → "$1,234.56". */
+export function formatUsd(cents: number): string {
+  return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+}
+
 /** Map a rating deviation to a plain-English confidence label. */
 export function confidenceLabel(rd: number): { label: string; tone: "low" | "medium" | "high" } {
   if (rd <= 75) return { label: "High confidence", tone: "high" };
