@@ -113,6 +113,14 @@ model Team {
   // gcTeamId; season-to-season website history comes from the succession chain.
   website   String?
 
+  // Captured verbatim from the team's GameChanger page header (for provenance and
+  // future season/succession logic). gcSeason is GC's own label, e.g.
+  // "Spring 2026" / "Fall 2025" — note a team may keep one GC team across several
+  // real seasons, so this is the label GC assigned, not a strict period. gcRecord
+  // is GC's stated W-L, e.g. "16-17".
+  gcSeason  String?
+  gcRecord  String?
+
   isActive Boolean @default(true)
   // Ghost teams are opponents auto-created from scraped games before an admin
   // has formally added/enriched them. They still contribute to ratings.

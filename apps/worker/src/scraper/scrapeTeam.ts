@@ -133,6 +133,8 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
       locationLocked: true,
       ageGroup: true,
       coaches: true,
+      gcSeason: true,
+      gcRecord: true,
     },
   });
   if (!t) return;
@@ -145,6 +147,11 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
   // locked the location (GameChanger sometimes reports a tournament's host city),
   // leave city/coords untouched.
   const data: Record<string, unknown> = {};
+
+  // GameChanger header metadata (provenance + future season/succession work).
+  // Season is GC's own label; record is their stated W-L. Refresh when changed.
+  if (header.season && header.season !== t.gcSeason) data.gcSeason = header.season;
+  if (header.record && header.record !== t.gcRecord) data.gcRecord = header.record;
   if (!t.locationLocked) {
     if (!t.city && header.city) data.city = header.city;
     // State comes from the team's OWN page and is authoritative. Quick-added
@@ -253,43 +260,49 @@ async function upsertGame(teamId: string, g: ParsedGame): Promise<boolean> {
   const awayScore = g.isHome ? g.opponentScore! : g.teamScore!;
   const playedAt = g.playedAt ? new Date(g.playedAt) : new Date();
 
+  // 1. Incremental: the exact same GameChanger game is already stored (re-scrape
+  //    of this team, or a SCHEDULED → FINAL transition) — update it in place.
   if (g.gcGameId) {
     const existing = await prisma.game.findUnique({ where: { gcGameId: g.gcGameId } });
     if (existing) {
-      // Update scores (e.g. SCHEDULED → FINAL transition).
       await prisma.game.update({
         where: { gcGameId: g.gcGameId },
         data: { homeScore, awayScore, status: "FINAL" },
       });
       return false;
     }
-    await prisma.game.create({
-      data: {
-        gcGameId: g.gcGameId,
-        homeTeamId,
-        awayTeamId,
-        homeScore,
-        awayScore,
-        status: "FINAL",
-        source: "SCRAPE",
-        playedAt,
-      },
-    });
-    return true;
   }
 
-  // No game id: advisory dedup on (teams, day).
+  // 2. Same matchup, same day (either orientation) already stored? Update it and
+  //    backfill the gcGameId if it's missing, so a per-team UUID doesn't create a
+  //    cross-team duplicate (the opponent's scrape has a DIFFERENT uuid for this
+  //    same game).
   const dayStart = new Date(playedAt);
   dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(playedAt);
   dayEnd.setHours(23, 59, 59, 999);
   const dup = await prisma.game.findFirst({
-    where: { homeTeamId, awayTeamId, playedAt: { gte: dayStart, lte: dayEnd } },
+    where: {
+      playedAt: { gte: dayStart, lte: dayEnd },
+      OR: [
+        { homeTeamId, awayTeamId },
+        { homeTeamId: awayTeamId, awayTeamId: homeTeamId },
+      ],
+    },
   });
-  if (dup) return false;
+  if (dup) {
+    if (g.gcGameId && !dup.gcGameId) {
+      await prisma.game
+        .update({ where: { id: dup.id }, data: { gcGameId: g.gcGameId } })
+        .catch(() => {});
+    }
+    return false;
+  }
 
+  // 3. New game.
   await prisma.game.create({
     data: {
+      gcGameId: g.gcGameId ?? null,
       homeTeamId,
       awayTeamId,
       homeScore,
