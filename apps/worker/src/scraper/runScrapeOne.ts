@@ -63,6 +63,56 @@ export async function runScrapeOne(gcTeamId: string | undefined): Promise<void> 
   await maybeRecompute(`scraped ${team.name}`);
 }
 
+/**
+ * Full re-scrape of EVERY scrapeable team (regardless of when last scraped), then
+ * recompute once. A deliberate, run-when-ready one-off — e.g. to backfill new
+ * fields (gcSeason/gcRecord/gcGameId) across the whole population. Idempotent:
+ * scrapeTeam updates lastScrapedAt as it goes, so a re-run just does everyone
+ * again. Long-running (polite delay per team); stops early if BLOCKED.
+ */
+export async function runScrapeAll(): Promise<void> {
+  const teams = await prisma.team.findMany({
+    where: { scrapeEnabled: true, gcTeamId: { not: null } },
+    select: { id: true, gcTeamId: true, name: true },
+    orderBy: { lastScrapedAt: "asc" }, // oldest first so a killed run resumes usefully
+  });
+  if (teams.length === 0) {
+    console.log("[scrape-all] no scrapeable teams.");
+    return;
+  }
+  console.log(`[scrape-all] re-scraping all ${teams.length} team(s).`);
+
+  const browser = await launchBrowser();
+  let totalNew = 0;
+  let processed = 0;
+  try {
+    for (const t of teams) {
+      const result = await scrapeTeam(
+        () => newContext(browser),
+        { id: t.id, gcTeamId: t.gcTeamId!, name: t.name, reason: "weekly" },
+        new Date(),
+      );
+      totalNew += result.gamesNew;
+      processed += 1;
+      console.log(
+        `[scrape-all] ${processed}/${teams.length} ${t.name}: ${result.status} ` +
+          `found=${result.gamesFound} new=${result.gamesNew}`,
+      );
+      if (result.status === "BLOCKED") {
+        console.warn("[scrape-all] BLOCKED — ending early; re-run later to finish.");
+        break;
+      }
+      if (t !== teams[teams.length - 1]) {
+        await jitterDelay(envNum("SCRAPER_MIN_DELAY_SEC", 10), envNum("SCRAPER_MAX_DELAY_SEC", 30));
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+
+  await maybeRecompute(`re-scraped ${processed}/${teams.length} team(s), ${totalNew} new game(s)`);
+}
+
 /** Scrape every just-added (never-scraped) team, then recompute once. */
 export async function runScrapeNew(): Promise<void> {
   const teams = await prisma.team.findMany({
