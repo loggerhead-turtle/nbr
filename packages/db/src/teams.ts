@@ -734,27 +734,71 @@ export async function repairCrossAgeMerge(finding: BadMergeFinding): Promise<num
 }
 
 /** Remove self-games and duplicate matchups (same teams + same day) for a team. */
-export async function dedupeTeamGames(teamId: string): Promise<void> {
+export async function dedupeTeamGames(teamId: string): Promise<number> {
   const games = await prisma.game.findMany({
     where: { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] },
+    select: {
+      id: true,
+      homeTeamId: true,
+      awayTeamId: true,
+      playedAt: true,
+      createdAt: true,
+      homeTeam: { select: { name: true, isGhost: true } },
+      awayTeam: { select: { name: true, isGhost: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
 
-  const seen = new Set<string>();
+  // Group by the OPPONENT's normalized name + day, ignoring home/away orientation
+  // and whether the opponent is the real team or a ghost of it. This catches the
+  // duplicate created when a team is verified (its own scraped game) and then a
+  // ghost is merged in (the same matchup from the opponent's side, often with the
+  // opponent recorded as a different ghost record or with sides swapped) — cases
+  // the old id+orientation key missed.
+  const groups = new Map<string, typeof games>();
   const toDelete: string[] = [];
   for (const g of games) {
     if (g.homeTeamId === g.awayTeamId) {
-      toDelete.push(g.id);
+      toDelete.push(g.id); // self-game: always junk
       continue;
     }
+    const opp = g.homeTeamId === teamId ? g.awayTeam : g.homeTeam;
     const day = g.playedAt.toISOString().slice(0, 10);
-    const key = `${g.homeTeamId}|${g.awayTeamId}|${day}`;
-    if (seen.has(key)) toDelete.push(g.id);
-    else seen.add(key);
+    const key = `${normalizeTeamName(opp.name)}|${day}`;
+    const arr = groups.get(key);
+    if (arr) arr.push(g);
+    else groups.set(key, [g]);
   }
+
+  for (const gs of groups.values()) {
+    if (gs.length <= 1) continue;
+    // Keep the best representative: prefer the game whose opponent is a VERIFIED
+    // (non-ghost) team, then the earliest recorded. Delete the rest.
+    gs.sort((a, b) => {
+      const oppA = a.homeTeamId === teamId ? a.awayTeam : a.homeTeam;
+      const oppB = b.homeTeamId === teamId ? b.awayTeam : b.homeTeam;
+      if (oppA.isGhost !== oppB.isGhost) return oppA.isGhost ? 1 : -1;
+      return a.createdAt < b.createdAt ? -1 : 1;
+    });
+    for (const g of gs.slice(1)) toDelete.push(g.id);
+  }
+
   if (toDelete.length) {
     await prisma.game.deleteMany({ where: { id: { in: toDelete } } });
   }
+  return toDelete.length;
+}
+
+/**
+ * Run the (orientation/ghost-aware) dedupe across every verified team — the
+ * cleanup for duplicate games left by earlier merges. Returns the number of
+ * duplicate game rows removed. Recompute afterward (games changed).
+ */
+export async function dedupeAllGames(): Promise<number> {
+  const teams = await prisma.team.findMany({ where: { isGhost: false }, select: { id: true } });
+  let removed = 0;
+  for (const t of teams) removed += await dedupeTeamGames(t.id);
+  return removed;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1283,10 +1327,12 @@ async function ghostOpponentCounts(): Promise<Map<string, number>> {
 export async function getLookupTeams(opts?: {
   q?: string;
   ageGroup?: string;
+  state?: string;
   limit?: number;
 }): Promise<LookupTeam[]> {
   const q = opts?.q?.trim();
   const ageGroup = opts?.ageGroup?.trim() || undefined;
+  const state = opts?.state?.trim().toUpperCase() || undefined;
   const limit = opts?.limit ?? 40;
 
   const countByTeam = await ghostOpponentCounts();
@@ -1299,6 +1345,7 @@ export async function getLookupTeams(opts?: {
         : // Browsing: only teams that have unverified opponents (the worklist).
           { id: { in: [...countByTeam.keys()] } }),
       ...(ageGroup ? { ageGroup: ageGroup as never } : {}),
+      ...(state ? { state } : {}),
     },
     select: { id: true, name: true, slug: true, ageGroup: true, city: true, gcTeamId: true, createdAt: true },
     take: 1000,
@@ -1317,6 +1364,17 @@ export async function getLookupTeams(opts?: {
     }))
     .sort((a, b) => b.unverifiedCount - a.unverifiedCount || (a.name < b.name ? -1 : 1))
     .slice(0, limit);
+}
+
+/** Distinct states present among verified teams — for the lookup state filter. */
+export async function getLookupStates(): Promise<string[]> {
+  const rows = await prisma.team.findMany({
+    where: { isGhost: false, state: { not: "" } },
+    select: { state: true },
+    distinct: ["state"],
+    orderBy: { state: "asc" },
+  });
+  return rows.map((r) => r.state).filter(Boolean);
 }
 
 export interface UnverifiedOpponent {

@@ -23,6 +23,7 @@ export {
   findAutoMergeTarget,
   mergeTeams,
   dedupeTeamGames,
+  dedupeAllGames,
   findCrossAgeMergeArtifacts,
   repairCrossAgeMerge,
   getGhostTeamsWithSuggestions,
@@ -38,6 +39,7 @@ export {
   getGhostMergeQueue,
   refreshTeamPendingMerge,
   getLookupTeams,
+  getLookupStates,
   getUnverifiedOpponents,
   GHOST_MERGE_DISMISSALS_KEY,
 } from "./teams";

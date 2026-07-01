@@ -14,6 +14,7 @@ import {
   getGhostSplitGroups,
   reassignTeamGames,
   refreshTeamPendingMerge,
+  dedupeAllGames,
   GHOST_MERGE_DISMISSALS_KEY,
   type GhostSplitGroup,
 } from "@nbr/db";
@@ -793,6 +794,23 @@ export async function recomputeRatingsAction(): Promise<ActionState> {
         error:
           "Couldn't start the recompute job. Set RENDER_API_KEY and RENDER_WORKER_SERVICE_ID (see server logs).",
       };
+}
+
+/**
+ * Remove duplicate games across all verified teams — the cleanup for the extra
+ * rows a merge can leave (the same matchup recorded against the verified team and
+ * against a ghost of the opponent). Keeps the verified-opponent copy, then
+ * recomputes since the game graph changed.
+ */
+export async function dedupeGamesAction(): Promise<ActionState> {
+  await requireAdmin();
+  const removed = await dedupeAllGames();
+  if (removed > 0) await triggerRecompute();
+  revalidatePath("/");
+  revalidatePath("/admin/merge-queue");
+  return removed > 0
+    ? { ok: true, message: `Removed ${removed} duplicate game${removed === 1 ? "" : "s"} — recompute started.` }
+    : { ok: true, message: "No duplicate games found." };
 }
 
 /** Scrape every just-added (never-scraped) team, then recompute — the manual
