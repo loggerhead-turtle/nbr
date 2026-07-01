@@ -1,11 +1,15 @@
 /** Display helpers shared across pages. */
 
 /**
- * NBR is shown on a compact scale: the internal rating is divided by 10 and
- * rounded (e.g. an internal 1954 displays as 195). All user-facing rating/NBR
- * displays go through this helper so the scale stays consistent.
+ * NBR is shown on the full internal scale (4 digits, ~1500-based) — e.g. an
+ * internal 1954 displays as 1954. The divisor is 1 (no compression); it stays a
+ * named constant so every rating display AND the TD search filter (which converts
+ * a typed NBR back to the internal value) share one source of truth. Because the
+ * scaling was always display-only — stored Rating/RatingHistory values are the
+ * internal 4-digit numbers — setting this back to 1 restores the entire history
+ * to 4 digits as if it were never compressed.
  */
-export const NBR_DISPLAY_DIVISOR = 10;
+export const NBR_DISPLAY_DIVISOR = 1;
 
 export function formatRating(rating: number): string {
   return Math.round(rating / NBR_DISPLAY_DIVISOR).toString();
