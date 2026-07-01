@@ -796,12 +796,36 @@ export async function recomputeRatingsAction(): Promise<ActionState> {
 }
 
 /** Scrape every just-added (never-scraped) team, then recompute — the manual
- * equivalent of the on-add trigger, for when you've bulk-added teams. */
+ * equivalent of the on-add trigger, for when you've bulk-added teams. Reports how
+ * many teams are actually eligible so a "nothing happened" is explained, not
+ * silent (the job only scrapes teams with a GameChanger ID that were never
+ * scraped). */
 export async function scrapeNewTeamsAction(): Promise<ActionState> {
   await requireAdmin();
+
+  // Same predicate runScrapeNew uses: a GC id, scraping on, never scraped yet.
+  const eligible = await prisma.team.count({
+    where: { scrapeEnabled: true, gcTeamId: { not: null }, lastScrapedAt: null },
+  });
+  if (eligible === 0) {
+    // Explain the most likely reason nothing would scrape.
+    const noGcId = await prisma.team.count({
+      where: { isGhost: false, gcTeamId: null, lastScrapedAt: null },
+    });
+    return {
+      error:
+        noGcId > 0
+          ? `Nothing to scrape: ${noGcId} added team(s) have no GameChanger ID. Add teams by GameChanger ID (Add team → paste IDs) so they can be scraped.`
+          : "Nothing to scrape — every added team has already been scraped.",
+    };
+  }
+
   const sent = await triggerScrapeNew();
   return sent
-    ? { ok: true, message: "Scrape started for newly added teams — ratings recompute after." }
+    ? {
+        ok: true,
+        message: `Scrape started for ${eligible} new team${eligible === 1 ? "" : "s"} — ratings recompute after. (Check the nbr-scraper job logs for progress.)`,
+      }
     : {
         error:
           "Couldn't start the scrape job. Set RENDER_API_KEY and RENDER_WORKER_SERVICE_ID (see server logs).",
