@@ -1238,3 +1238,115 @@ export async function getGhostMergeQueue(opts?: {
   );
   return items;
 }
+
+// ── GameChanger lookup (verify opponents) ───────────────────────────────────
+// Admin workflow: pick a verified team, see its still-unverified (ghost)
+// opponents, copy each name to paste into GameChanger search, then add the real
+// team by id. Working through verified teams this way steadily verifies the
+// opponents they've played.
+
+export interface LookupTeam {
+  id: string;
+  name: string;
+  slug: string;
+  ageGroup: string | null;
+  city: string | null;
+  gcTeamId: string | null;
+  createdAt: string;
+}
+
+/**
+ * Verified (non-ghost) teams for the lookup page: name-search when `q` is given,
+ * otherwise the most recently added (so a team added tonight is right there to
+ * work through). Ghosts are excluded — you verify FROM a real team's schedule.
+ */
+export async function getLookupTeams(opts?: { q?: string; limit?: number }): Promise<LookupTeam[]> {
+  const q = opts?.q?.trim();
+  const teams = await prisma.team.findMany({
+    where: {
+      isGhost: false,
+      ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
+    },
+    select: { id: true, name: true, slug: true, ageGroup: true, city: true, gcTeamId: true, createdAt: true },
+    orderBy: q ? { name: "asc" } : { createdAt: "desc" },
+    take: opts?.limit ?? 30,
+  });
+  return teams.map((t) => ({
+    id: t.id,
+    name: t.name,
+    slug: t.slug,
+    ageGroup: t.ageGroup,
+    city: t.city,
+    gcTeamId: t.gcTeamId,
+    createdAt: t.createdAt.toISOString(),
+  }));
+}
+
+export interface UnverifiedOpponent {
+  id: string;
+  name: string;
+  slug: string;
+  ageGroup: string | null;
+  games: number;
+  lastPlayed: string;
+}
+
+export interface TeamOpponentsView {
+  team: { id: string; name: string; slug: string; gcTeamId: string | null; ageGroup: string | null };
+  opponents: UnverifiedOpponent[];
+}
+
+/**
+ * One team's UNVERIFIED (ghost) opponents, deduped by opponent with a game count
+ * and most-recent date. These are the teams to find on GameChanger and add.
+ */
+export async function getUnverifiedOpponents(teamId: string): Promise<TeamOpponentsView | null> {
+  const oppSelect = { select: { id: true, name: true, slug: true, ageGroup: true, isGhost: true } };
+  const t = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      gcTeamId: true,
+      ageGroup: true,
+      homeGames: {
+        where: { status: "FINAL" },
+        select: { playedAt: true, awayTeam: oppSelect },
+      },
+      awayGames: {
+        where: { status: "FINAL" },
+        select: { playedAt: true, homeTeam: oppSelect },
+      },
+    },
+  });
+  if (!t) return null;
+
+  const byOpp = new Map<string, UnverifiedOpponent>();
+  const add = (opp: { id: string; name: string; slug: string; ageGroup: string | null; isGhost: boolean }, playedAt: Date) => {
+    if (!opp.isGhost) return; // only unverified opponents
+    const date = playedAt.toISOString().slice(0, 10);
+    const cur = byOpp.get(opp.id);
+    if (cur) {
+      cur.games += 1;
+      if (date > cur.lastPlayed) cur.lastPlayed = date;
+    } else {
+      byOpp.set(opp.id, {
+        id: opp.id,
+        name: opp.name,
+        slug: opp.slug,
+        ageGroup: opp.ageGroup,
+        games: 1,
+        lastPlayed: date,
+      });
+    }
+  };
+  for (const g of t.homeGames) add(g.awayTeam, g.playedAt);
+  for (const g of t.awayGames) add(g.homeTeam, g.playedAt);
+
+  const opponents = [...byOpp.values()].sort((a, b) => (a.lastPlayed < b.lastPlayed ? 1 : -1));
+  return {
+    team: { id: t.id, name: t.name, slug: t.slug, gcTeamId: t.gcTeamId, ageGroup: t.ageGroup },
+    opponents,
+  };
+}
