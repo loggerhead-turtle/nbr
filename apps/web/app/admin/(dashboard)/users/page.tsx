@@ -95,6 +95,19 @@ export default async function AdminUsersPage({
                         <button className="btn-ghost text-slate-500">Remove admin</button>
                       </form>
                     )}
+                    {u.role === "GAME_SCRAPER" ? (
+                      <form action={setUserRoleAction}>
+                        <input type="hidden" name="userId" value={u.id} />
+                        <input type="hidden" name="role" value="USER" />
+                        <button className="btn-ghost text-slate-500">Remove scraper</button>
+                      </form>
+                    ) : u.role !== "ADMIN" ? (
+                      <form action={setUserRoleAction}>
+                        <input type="hidden" name="userId" value={u.id} />
+                        <input type="hidden" name="role" value="GAME_SCRAPER" />
+                        <button className="btn-ghost text-sky-700">Make scraper</button>
+                      </form>
+                    ) : null}
                     {u.tdStatus !== "APPROVED" ? (
                       <form action={setTdStatusAction}>
                         <input type="hidden" name="userId" value={u.id} />

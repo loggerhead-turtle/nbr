@@ -70,7 +70,10 @@ export async function loginUserAction(_prev: AccountState, formData: FormData): 
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
   const store = await cookies();
   store.set(USER_COOKIE, createUserSession(user.id), userCookieOptions);
-  redirect(next);
+  // Game-scraper staff land in their limited area unless an explicit next was set.
+  const explicitNext = String(formData.get("next") ?? "").startsWith("/");
+  const dest = !explicitNext && user.role === "GAME_SCRAPER" ? "/staff/gc-lookup" : next;
+  redirect(dest);
 }
 
 export async function logoutUserAction(): Promise<void> {
