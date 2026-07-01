@@ -9,7 +9,7 @@ import {
   ageGroupLabel,
   formatDate,
 } from "@/lib/format";
-import { ProvisionalBadge, ConfidenceBadge, GhostBadge } from "@/components/badges";
+import { ProvisionalBadge, ConfidenceBadge, GhostBadge, VerifyingBadge } from "@/components/badges";
 import { TeamMedallion } from "@/components/team-medallion";
 import { teamMedallion } from "@/lib/medallion";
 import { RatingChart } from "@/components/rating-chart";
@@ -114,6 +114,7 @@ export default async function TeamPage({ params }: Params) {
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {team.rating?.isProvisional && <ProvisionalBadge />}
               {team.rating && <ConfidenceBadge rd={team.rating.rd} />}
+              {team.pendingMerge && <VerifyingBadge />}
               {team.isGhost && <GhostBadge />}
             </div>
           </div>

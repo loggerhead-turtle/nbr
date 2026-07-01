@@ -22,6 +22,20 @@ export function ConfidenceBadge({ rd }: { rd: number }) {
   return <span className={`badge ${cls}`}>{label}</span>;
 }
 
+export function VerifyingBadge() {
+  return (
+    <span
+      className="badge bg-sky-100 text-sky-800"
+      title="Verifying: a likely duplicate of this team is awaiting review. Its games already count; the record may grow once the match is confirmed."
+    >
+      <span aria-hidden className="mr-0.5">
+        ⟳
+      </span>
+      Verifying
+    </span>
+  );
+}
+
 export function GhostBadge() {
   return (
     <span
