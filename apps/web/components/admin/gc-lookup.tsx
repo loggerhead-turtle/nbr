@@ -1,34 +1,100 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useActionState } from "react";
+import { AGE_GROUPS } from "@nbr/core";
+import { ageGroupLabel } from "@/lib/format";
+import { quickAddTeamsAction, type ActionState } from "@/lib/admin-actions";
 import { NbrLink } from "./team-links";
 import type { TeamOpponentsView } from "@nbr/db";
 
 const BASE = "/admin/gc-lookup";
 
-/** Front-page-style live search for VERIFIED teams; soft-navigates to ?q=. */
-export function GcLookupSearch({ defaultQuery }: { defaultQuery?: string }) {
+/**
+ * Front-page-style live search for VERIFIED teams, with an age-group filter.
+ * Both controls soft-navigate (?q=&age=) so scroll position is kept.
+ */
+export function GcLookupSearch({
+  defaultQuery,
+  defaultAge,
+}: {
+  defaultQuery?: string;
+  defaultAge?: string;
+}) {
   const router = useRouter();
+  const qRef = useRef<HTMLInputElement>(null);
+  const ageRef = useRef<HTMLSelectElement>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const go = (q: string) => {
-    const qs = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
-    router.replace(`${BASE}${qs}`, { scroll: false });
+  const go = () => {
+    const params = new URLSearchParams();
+    const q = qRef.current?.value.trim();
+    const age = ageRef.current?.value;
+    if (q) params.set("q", q);
+    if (age) params.set("age", age);
+    const qs = params.toString();
+    router.replace(qs ? `${BASE}?${qs}` : BASE, { scroll: false });
   };
 
   return (
-    <input
-      defaultValue={defaultQuery}
-      placeholder="Search verified teams by name…"
-      className="input w-full"
-      autoFocus
-      onChange={(e) => {
-        const v = e.target.value;
-        if (debounce.current) clearTimeout(debounce.current);
-        debounce.current = setTimeout(() => go(v), 400);
-      }}
-    />
+    <div className="flex flex-wrap gap-2">
+      <input
+        ref={qRef}
+        defaultValue={defaultQuery}
+        placeholder="Search verified teams by name…"
+        className="input min-w-[200px] flex-1"
+        onChange={() => {
+          if (debounce.current) clearTimeout(debounce.current);
+          debounce.current = setTimeout(go, 400);
+        }}
+      />
+      <select ref={ageRef} defaultValue={defaultAge ?? ""} className="input" onChange={go}>
+        <option value="">All ages</option>
+        {AGE_GROUPS.map((a) => (
+          <option key={a} value={a}>
+            {ageGroupLabel(a)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/**
+ * Floating "add teams" box that stays fixed on screen while you scroll the
+ * lookup page — paste the GameChanger IDs you found and add them without
+ * scrolling back up. Uses the same bulk quick-add as the Add-team page.
+ */
+export function StickyAddTeams() {
+  const [state, action, pending] = useActionState<ActionState, FormData>(quickAddTeamsAction, {});
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Clear the box after a successful add so the next batch starts fresh.
+  useEffect(() => {
+    if (state.ok) formRef.current?.reset();
+  }, [state.ok]);
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 w-[min(92vw,22rem)] rounded-xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur">
+      <form ref={formRef} action={action} className="flex flex-col gap-2">
+        <div className="flex gap-2">
+          <input
+            name="ids"
+            placeholder="Paste GameChanger ID(s)…"
+            className="input flex-1 font-mono text-sm"
+            aria-label="GameChanger team IDs"
+          />
+          <button type="submit" disabled={pending} className="btn-primary shrink-0 disabled:opacity-50">
+            {pending ? "Adding…" : "Add teams"}
+          </button>
+        </div>
+        {state.error && <p className="text-xs font-medium text-rose-600">{state.error}</p>}
+        {state.ok && state.message && (
+          <p className="text-xs font-medium text-emerald-700">{state.message}</p>
+        )}
+      </form>
+    </div>
   );
 }
 

@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { getLookupTeams, getUnverifiedOpponents } from "@nbr/db";
-import { GcLookupSearch, UnverifiedOpponentList } from "@/components/admin/gc-lookup";
+import { AGE_GROUPS } from "@nbr/core";
+import {
+  GcLookupSearch,
+  UnverifiedOpponentList,
+  StickyAddTeams,
+} from "@/components/admin/gc-lookup";
 import { ageGroupLabel } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -13,16 +18,19 @@ export default async function GcLookupPage({
 }) {
   const sp = await searchParams;
   const q = sp.q?.trim() || undefined;
+  const age =
+    sp.age && (AGE_GROUPS as readonly string[]).includes(sp.age) ? sp.age : undefined;
   const selectedId = sp.team || undefined;
 
   const [teams, view] = await Promise.all([
-    getLookupTeams({ q }),
+    getLookupTeams({ q, ageGroup: age }),
     selectedId ? getUnverifiedOpponents(selectedId) : Promise.resolve(null),
   ]);
 
   const teamHref = (id: string) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
+    if (age) params.set("age", age);
     params.set("team", id);
     return `/admin/gc-lookup?${params.toString()}`;
   };
@@ -40,14 +48,15 @@ export default async function GcLookupPage({
       </p>
 
       <div className="mb-5">
-        <GcLookupSearch defaultQuery={q} />
+        <GcLookupSearch defaultQuery={q} defaultAge={age} />
       </div>
 
       <div className="grid gap-5 md:grid-cols-[minmax(0,20rem)_1fr]">
         {/* Team picker */}
         <div className="card overflow-hidden">
           <p className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-            {q ? `Matches for “${q}”` : "Recently added"}
+            {q ? `Matches for “${q}”` : "Most unverified opponents"}
+            {age ? ` · ${ageGroupLabel(age)}` : ""}
           </p>
           {teams.length === 0 ? (
             <p className="px-3 py-4 text-sm text-slate-400">No verified teams found.</p>
@@ -60,16 +69,26 @@ export default async function GcLookupPage({
                     <Link
                       href={teamHref(t.id)}
                       scroll={false}
-                      className={`block px-3 py-2 text-sm hover:bg-slate-50 ${
+                      className={`flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-slate-50 ${
                         active ? "bg-sky-50" : ""
                       }`}
                     >
-                      <span className="font-medium text-navy-800">{t.name}</span>
-                      <span className="block text-xs text-slate-400">
-                        {t.city ? `${t.city} · ` : ""}
-                        {ageGroupLabel(t.ageGroup)}
-                        {t.gcTeamId ? "" : " · no GC id"}
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-navy-800">{t.name}</span>
+                        <span className="block text-xs text-slate-400">
+                          {t.city ? `${t.city} · ` : ""}
+                          {ageGroupLabel(t.ageGroup)}
+                          {t.gcTeamId ? "" : " · no GC id"}
+                        </span>
                       </span>
+                      {t.unverifiedCount > 0 && (
+                        <span
+                          className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800"
+                          title={`${t.unverifiedCount} unverified opponent(s)`}
+                        >
+                          {t.unverifiedCount}
+                        </span>
+                      )}
                     </Link>
                   </li>
                 );
@@ -89,6 +108,9 @@ export default async function GcLookupPage({
           )}
         </div>
       </div>
+
+      {/* Floating add-teams box that follows the screen while you scroll. */}
+      <StickyAddTeams />
     </div>
   );
 }

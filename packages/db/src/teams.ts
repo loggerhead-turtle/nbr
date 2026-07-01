@@ -1253,33 +1253,70 @@ export interface LookupTeam {
   city: string | null;
   gcTeamId: string | null;
   createdAt: string;
+  /** Distinct unverified (ghost) opponents on this team's schedule. */
+  unverifiedCount: number;
+}
+
+/** Distinct ghost-opponent count per (non-ghost) team, one pass over FINAL games. */
+async function ghostOpponentCounts(): Promise<Map<string, number>> {
+  const rows = await prisma.$queryRaw<{ team_id: string; cnt: number }[]>`
+    SELECT team_id, COUNT(DISTINCT opp_id)::int AS cnt FROM (
+      SELECT g."homeTeamId" AS team_id, g."awayTeamId" AS opp_id
+        FROM "Game" g JOIN "Team" o ON o.id = g."awayTeamId"
+        WHERE g.status = 'FINAL' AND o."isGhost" = true
+      UNION ALL
+      SELECT g."awayTeamId" AS team_id, g."homeTeamId" AS opp_id
+        FROM "Game" g JOIN "Team" o ON o.id = g."homeTeamId"
+        WHERE g.status = 'FINAL' AND o."isGhost" = true
+    ) x GROUP BY team_id`;
+  return new Map(rows.map((r) => [r.team_id, Number(r.cnt)]));
 }
 
 /**
- * Verified (non-ghost) teams for the lookup page: name-search when `q` is given,
- * otherwise the most recently added (so a team added tonight is right there to
- * work through). Ghosts are excluded — you verify FROM a real team's schedule.
+ * Verified (non-ghost) teams for the lookup page, ranked by how many unverified
+ * (ghost) opponents they still have — most first — so the biggest cleanup jobs
+ * surface. Optional name search and age-group filter. When browsing (no search)
+ * only teams that actually have unverified opponents are shown (the worklist);
+ * a name search shows all matches so any team is findable. Ghosts are excluded —
+ * you verify FROM a real team's schedule.
  */
-export async function getLookupTeams(opts?: { q?: string; limit?: number }): Promise<LookupTeam[]> {
+export async function getLookupTeams(opts?: {
+  q?: string;
+  ageGroup?: string;
+  limit?: number;
+}): Promise<LookupTeam[]> {
   const q = opts?.q?.trim();
+  const ageGroup = opts?.ageGroup?.trim() || undefined;
+  const limit = opts?.limit ?? 40;
+
+  const countByTeam = await ghostOpponentCounts();
+
   const teams = await prisma.team.findMany({
     where: {
       isGhost: false,
-      ...(q ? { name: { contains: q, mode: "insensitive" as const } } : {}),
+      ...(q
+        ? { name: { contains: q, mode: "insensitive" as const } }
+        : // Browsing: only teams that have unverified opponents (the worklist).
+          { id: { in: [...countByTeam.keys()] } }),
+      ...(ageGroup ? { ageGroup: ageGroup as never } : {}),
     },
     select: { id: true, name: true, slug: true, ageGroup: true, city: true, gcTeamId: true, createdAt: true },
-    orderBy: q ? { name: "asc" } : { createdAt: "desc" },
-    take: opts?.limit ?? 30,
+    take: 1000,
   });
-  return teams.map((t) => ({
-    id: t.id,
-    name: t.name,
-    slug: t.slug,
-    ageGroup: t.ageGroup,
-    city: t.city,
-    gcTeamId: t.gcTeamId,
-    createdAt: t.createdAt.toISOString(),
-  }));
+
+  return teams
+    .map((t) => ({
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      ageGroup: t.ageGroup,
+      city: t.city,
+      gcTeamId: t.gcTeamId,
+      createdAt: t.createdAt.toISOString(),
+      unverifiedCount: countByTeam.get(t.id) ?? 0,
+    }))
+    .sort((a, b) => b.unverifiedCount - a.unverifiedCount || (a.name < b.name ? -1 : 1))
+    .slice(0, limit);
 }
 
 export interface UnverifiedOpponent {
