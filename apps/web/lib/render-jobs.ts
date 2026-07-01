@@ -74,6 +74,11 @@ export async function triggerRescrapeAll(): Promise<boolean> {
   return postJob("pnpm --filter @nbr/worker scrape-all");
 }
 
+/** Background ghost cleanup: merge duplicate ghosts + delete empty ones. */
+export async function triggerCleanGhosts(): Promise<boolean> {
+  return postJob("pnpm --filter @nbr/worker clean-ghosts");
+}
+
 /** Recompute all ratings (e.g. after an admin repairs/merges teams). */
 export async function triggerRecompute(): Promise<boolean> {
   return postJob("pnpm --filter @nbr/worker recompute");

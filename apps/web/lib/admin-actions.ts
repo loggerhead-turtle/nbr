@@ -15,7 +15,6 @@ import {
   reassignTeamGames,
   refreshTeamPendingMerge,
   dedupeAllGames,
-  mergeDuplicateGhosts,
   getScrapePayRateCents,
   setScrapePayRateCents,
   setScrapeGoals,
@@ -46,6 +45,7 @@ import {
   triggerScrapeTeam,
   triggerScrapeNew,
   triggerRescrapeAll,
+  triggerCleanGhosts,
   triggerRecompute,
 } from "./render-jobs";
 import type { MergeTargetOption } from "./merge-types";
@@ -935,24 +935,23 @@ export async function rescrapeAllAction(): Promise<ActionState> {
 }
 
 /**
- * Merge duplicate ghost teams (same name + age) into one — cleanup for the
- * duplicate ghosts repeated scrapes created. Games fold into the kept ghost and
- * de-duplicate. Recompute is unnecessary (ghost games are excluded from ratings),
- * but revalidate the pages whose counts change.
+ * Clean up ghosts as a BACKGROUND job (merge duplicate ghosts + delete empty
+ * ones). Dispatched to the worker rather than run inline because at thousands of
+ * ghosts an inline web request would time out.
  */
-export async function mergeDuplicateGhostsAction(): Promise<ActionState> {
+export async function cleanGhostsAction(): Promise<ActionState> {
   await requireAdmin();
-  const { groups, removed } = await mergeDuplicateGhosts();
-  revalidatePath("/admin/ghosts");
-  revalidatePath("/admin/duplicates");
-  revalidatePath("/admin/audit");
-  revalidatePath("/");
-  return removed > 0
+  const sent = await triggerCleanGhosts();
+  return sent
     ? {
         ok: true,
-        message: `Merged ${removed} duplicate ghost${removed === 1 ? "" : "s"} across ${groups} name group${groups === 1 ? "" : "s"}.`,
+        message:
+          "Ghost cleanup started in the background (merging duplicates, removing empties). Refresh the counts in a couple of minutes.",
       }
-    : { ok: true, message: "No duplicate ghosts found." };
+    : {
+        error:
+          "Couldn't start the cleanup job. Set RENDER_API_KEY and RENDER_WORKER_SERVICE_ID (see server logs).",
+      };
 }
 
 /** Scrape every just-added (never-scraped) team, then recompute — the manual
