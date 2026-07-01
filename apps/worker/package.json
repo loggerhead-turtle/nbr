@@ -8,6 +8,7 @@
     "maxpreps": "tsx src/index.ts maxpreps",
     "geocode": "tsx src/index.ts geocode",
     "reconcile": "tsx src/index.ts reconcile",
+    "inspect-links": "tsx src/index.ts inspect-links",
     "recompute": "tsx src/index.ts recompute",
     "backtest": "tsx src/index.ts backtest",
     "age-diagnostics": "tsx src/index.ts age-diagnostics",
