@@ -18,10 +18,22 @@
 // into a job's start command to avoid any command injection.
 const GC_ID = /^[A-Za-z0-9]+$/;
 
-async function postJob(startCommand: string): Promise<void> {
+/**
+ * POST a one-off job to Render. Returns true only when the job was actually
+ * dispatched (env configured AND the API accepted it); false when the trigger
+ * is unconfigured or the call failed — so callers can tell the admin whether
+ * anything really happened instead of the trigger being a silent no-op.
+ */
+async function postJob(startCommand: string): Promise<boolean> {
   const apiKey = process.env.RENDER_API_KEY;
   const serviceId = process.env.RENDER_WORKER_SERVICE_ID;
-  if (!apiKey || !serviceId) return; // not configured — rely on the scheduled scraper
+  if (!apiKey || !serviceId) {
+    console.warn(
+      "[render-jobs] RENDER_API_KEY / RENDER_WORKER_SERVICE_ID not set — " +
+        "skipping one-off job (relying on the scheduled scraper).",
+    );
+    return false;
+  }
 
   try {
     const res = await fetch(`https://api.render.com/v1/services/${serviceId}/jobs`, {
@@ -37,24 +49,27 @@ async function postJob(startCommand: string): Promise<void> {
       console.error(
         `[render-jobs] trigger failed: ${res.status} ${await res.text().catch(() => "")}`,
       );
+      return false;
     }
+    return true;
   } catch (err) {
     console.error("[render-jobs] trigger error:", err);
+    return false;
   }
 }
 
 /** Scrape one just-added team (by GameChanger ID), then recompute. */
-export async function triggerScrapeTeam(gcTeamId: string | null | undefined): Promise<void> {
-  if (!gcTeamId || !GC_ID.test(gcTeamId)) return;
-  await postJob(`pnpm --filter @nbr/worker scrape-one ${gcTeamId}`);
+export async function triggerScrapeTeam(gcTeamId: string | null | undefined): Promise<boolean> {
+  if (!gcTeamId || !GC_ID.test(gcTeamId)) return false;
+  return postJob(`pnpm --filter @nbr/worker scrape-one ${gcTeamId}`);
 }
 
 /** Scrape all just-added (never-scraped) teams, then recompute once (bulk add). */
-export async function triggerScrapeNew(): Promise<void> {
-  await postJob("pnpm --filter @nbr/worker scrape-new");
+export async function triggerScrapeNew(): Promise<boolean> {
+  return postJob("pnpm --filter @nbr/worker scrape-new");
 }
 
 /** Recompute all ratings (e.g. after an admin repairs/merges teams). */
-export async function triggerRecompute(): Promise<void> {
-  await postJob("pnpm --filter @nbr/worker recompute");
+export async function triggerRecompute(): Promise<boolean> {
+  return postJob("pnpm --filter @nbr/worker recompute");
 }
