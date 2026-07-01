@@ -5,6 +5,7 @@ import { logoutAction } from "@/lib/admin-actions";
 import { countDuplicateCandidates } from "@/lib/duplicates";
 import { getActivitySeenMap, countNewActivityByType } from "@/lib/activity";
 import { countGhostTeams } from "@nbr/db";
+import { AdminQuickActions } from "@/components/admin/admin-quick-actions";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   if (!(await isAdmin())) redirect("/admin/login");
@@ -122,11 +123,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Settings
           </Link>
         </nav>
-        <form action={logoutAction}>
-          <button type="submit" className="text-sm text-slate-500 hover:text-rose-600">
-            Sign out
-          </button>
-        </form>
+        <div className="flex flex-wrap items-center gap-3">
+          <AdminQuickActions />
+          <form action={logoutAction}>
+            <button type="submit" className="text-sm text-slate-500 hover:text-rose-600">
+              Sign out
+            </button>
+          </form>
+        </div>
       </div>
       {children}
     </div>

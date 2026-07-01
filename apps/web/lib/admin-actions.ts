@@ -784,9 +784,28 @@ export async function deletePhantomGamesAction(formData: FormData): Promise<void
 }
 
 /** Kick a single ratings recompute — use after a batch of reconcile deletes. */
-export async function recomputeRatingsAction(): Promise<void> {
+export async function recomputeRatingsAction(): Promise<ActionState> {
   await requireAdmin();
-  await triggerRecompute();
+  const sent = await triggerRecompute();
+  return sent
+    ? { ok: true, message: "Recompute started — ratings update in a few minutes." }
+    : {
+        error:
+          "Couldn't start the recompute job. Set RENDER_API_KEY and RENDER_WORKER_SERVICE_ID (see server logs).",
+      };
+}
+
+/** Scrape every just-added (never-scraped) team, then recompute — the manual
+ * equivalent of the on-add trigger, for when you've bulk-added teams. */
+export async function scrapeNewTeamsAction(): Promise<ActionState> {
+  await requireAdmin();
+  const sent = await triggerScrapeNew();
+  return sent
+    ? { ok: true, message: "Scrape started for newly added teams — ratings recompute after." }
+    : {
+        error:
+          "Couldn't start the scrape job. Set RENDER_API_KEY and RENDER_WORKER_SERVICE_ID (see server logs).",
+      };
 }
 
 /**

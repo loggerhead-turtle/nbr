@@ -46,7 +46,9 @@ export function MergeQueueReview({ items }: { items: GhostMergeQueueItem[] }) {
         </p>
         {anyApproved && (
           <button
-            onClick={() => startRecompute(async () => recomputeRatingsAction())}
+            onClick={() => startRecompute(async () => {
+              await recomputeRatingsAction();
+            })}
             disabled={recomputing}
             className="btn-ghost disabled:opacity-50"
           >
