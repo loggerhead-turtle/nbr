@@ -5,6 +5,7 @@
  */
 import { prisma } from "@nbr/db";
 import { computeRatings, computeRatingsBT, BT_SCALE, EngineGame, EngineOutput } from "@nbr/ratings";
+import { envBool } from "../util.js";
 import {
   AGE_OFFSET_KEY,
   AGE_OFFSET_STEP_OLDER_KEY,
@@ -42,21 +43,36 @@ export async function runRecompute(): Promise<void> {
   console.log(`[recompute] started run ${run.id} (algorithm=${algorithm})`);
 
   try {
-    // Count every game a REAL team played — including games against an untracked
-    // (ghost) opponent, which are still that team's real results. Only games
-    // between TWO ghosts are dropped (pure noise: neither side is tracked). Ghost
-    // teams are rated internally to anchor their opponents but are hidden from the
-    // public rankings (getRatings filters isGhost) and their rating rows are
-    // purged below, so they never appear ranked.
+    // Ghost handling is a reversible toggle (env RATING_INCLUDE_GHOST_GAMES):
+    //
+    //   • default (false) — EXCLUDE every ghost game from the solve. A ghost is a
+    //     name-only opponent auto-created from a scraped schedule; because
+    //     GameChanger teams are per-season, a single ghost routinely blends games
+    //     from several distinct real teams (summer + spring "Utah Legends", etc.).
+    //     Feeding that Frankenstein into the model injects a fabricated opponent
+    //     and biases everyone who "played" it. Rating only games between two
+    //     TRACKED (non-ghost) teams keeps the graph honest at the cost of some
+    //     connectivity — the deliberate bias/variance trade (see docs).
+    //
+    //   • legacy (true) — include a game if EITHER side is a real team, rating the
+    //     ghost internally only to anchor its opponent. Kept so standings can be
+    //     compared before/after and the change rolled back without a code edit.
+    //
+    // Either way ghost Rating rows are purged after the solve (they must never be
+    // ranked); getRatings also filters isGhost.
+    const includeGhostGames = envBool("RATING_INCLUDE_GHOST_GAMES", false);
     const baseWhere = {
       status: "FINAL" as const,
       homeScore: { not: null },
       awayScore: { not: null },
     };
+    const ghostFilter = includeGhostGames
+      ? { OR: [{ homeTeam: { isGhost: false } }, { awayTeam: { isGhost: false } }] }
+      : { homeTeam: { isGhost: false }, awayTeam: { isGhost: false } };
     const games = await prisma.game.findMany({
       where: {
         ...baseWhere,
-        OR: [{ homeTeam: { isGhost: false } }, { awayTeam: { isGhost: false } }],
+        ...ghostFilter,
       },
       select: {
         homeTeamId: true,
@@ -69,9 +85,12 @@ export async function runRecompute(): Promise<void> {
       orderBy: { playedAt: "asc" },
     });
     const totalFinal = await prisma.game.count({ where: baseWhere });
+    const excludedLabel = includeGhostGames
+      ? "between two ghost teams"
+      : "involving a ghost team";
     console.log(
-      `[recompute] using ${games.length} games ` +
-        `(excluded ${totalFinal - games.length} between two ghost teams)`,
+      `[recompute] ghost games ${includeGhostGames ? "INCLUDED (legacy)" : "EXCLUDED"}; ` +
+        `using ${games.length} games (excluded ${totalFinal - games.length} ${excludedLabel})`,
     );
 
     const engineGames: EngineGame[] = games.map((g) => ({
