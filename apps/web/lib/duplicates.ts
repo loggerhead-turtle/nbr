@@ -41,7 +41,7 @@ function ageNumOf(a: string | null | undefined): number | null {
  */
 async function scanCandidates() {
   const [teams, games, dismissals] = await Promise.all([
-    prisma.team.findMany({ select: { id: true, name: true, ageGroup: true } }),
+    prisma.team.findMany({ select: { id: true, name: true, ageGroup: true, city: true, state: true } }),
     prisma.game.findMany({
       where: { status: "FINAL", homeScore: { not: null }, awayScore: { not: null } },
       select: { homeTeamId: true, awayTeamId: true, playedAt: true, homeScore: true, awayScore: true },
@@ -100,6 +100,22 @@ async function scanCandidates() {
     return x == null || y == null || x === y;
   };
 
+  // State per team — but only TRUST it when the team has a city (a located, real
+  // team). Ghosts and quick-added stubs default to "UT" with no city, so their
+  // state is "unknown" and stays compatible with anything (so a ghost still pairs
+  // with its real out-of-state twin). Two teams that BOTH have a city in DIFFERENT
+  // states are different clubs — a same-name collision, not a duplicate. This is
+  // what stops "Stars 12U" in NV/CA/TX from being flagged as duplicates of each
+  // other (the combinatorial blow-up after adding out-of-state teams).
+  const stateOf = new Map(
+    teams.map((t) => [t.id, t.city && t.state ? t.state.toUpperCase() : null] as const),
+  );
+  const stateCompatible = (a: string, b: string): boolean => {
+    const x = stateOf.get(a) ?? null;
+    const y = stateOf.get(b) ?? null;
+    return x == null || y == null || x === y;
+  };
+
   const candidates = new Set<string>();
 
   // Signal 1: exact same normalized name (age token kept) — the real team + a
@@ -114,11 +130,14 @@ async function scanCandidates() {
   for (const ids of byNorm.values()) {
     for (let i = 0; i < ids.length; i++)
       for (let j = i + 1; j < ids.length; j++)
-        if (ageCompatible(ids[i]!, ids[j]!)) candidates.add(pairKey(ids[i]!, ids[j]!).join("|"));
+        if (ageCompatible(ids[i]!, ids[j]!) && stateCompatible(ids[i]!, ids[j]!))
+          candidates.add(pairKey(ids[i]!, ids[j]!).join("|"));
   }
 
   // Signal 2: 3+ games against the same opponent on the same date — near-proof of
-  // the same team (scores checked for closeness later). Same-age only.
+  // the same team (scores checked for closeness later). Same-age only; NOT state-
+  // gated on purpose — sharing 3+ exact matchups means it's the same team even if
+  // a state is mislabeled.
   for (const [k, score] of pairScores) {
     if (score < 3) continue;
     const [a, b] = k.split("|") as [string, string];
