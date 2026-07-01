@@ -877,6 +877,34 @@ export async function dedupeGamesAction(): Promise<ActionState> {
     : { ok: true, message: "No duplicate games found." };
 }
 
+/**
+ * Re-scrape recently added teams to refresh their location (state/city). Quick-
+ * added teams default to state "UT"; the scraper now corrects out-of-state teams
+ * from their own page, but teams added before that fix stay mislabeled until
+ * re-scraped. This resets recent adds so the scrape-new pass re-fetches them.
+ */
+export async function rescrapeRecentAction(): Promise<ActionState> {
+  await requireAdmin();
+  const cutoff = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000);
+  const res = await prisma.team.updateMany({
+    where: {
+      isGhost: false,
+      gcTeamId: { not: null },
+      locationLocked: false,
+      createdAt: { gte: cutoff },
+    },
+    data: { lastScrapedAt: null, nextScrapeAfter: null, consecutiveFailures: 0 },
+  });
+  let sent = false;
+  if (res.count > 0) sent = await triggerScrapeNew();
+  if (res.count === 0) return { ok: true, message: "No recently added teams to re-scrape." };
+  return sent
+    ? { ok: true, message: `Re-scraping ${res.count} recent team(s) to fix locations — check back shortly.` }
+    : {
+        error: `Reset ${res.count} team(s), but couldn't start the scrape job (RENDER_API_KEY / RENDER_WORKER_SERVICE_ID not set).`,
+      };
+}
+
 /** Scrape every just-added (never-scraped) team, then recompute — the manual
  * equivalent of the on-add trigger, for when you've bulk-added teams. Reports how
  * many teams are actually eligible so a "nothing happened" is explained, not

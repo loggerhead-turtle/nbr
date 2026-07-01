@@ -14,9 +14,11 @@ import { getCurrentUser } from "@/lib/user-auth";
 export async function GcLookupContent({
   basePath,
   sp,
+  headerExtra,
 }: {
   basePath: string;
   sp: Record<string, string | undefined>;
+  headerExtra?: React.ReactNode;
 }) {
   const q = sp.q?.trim() || undefined;
   const age = sp.age && (AGE_GROUPS as readonly string[]).includes(sp.age) ? sp.age : undefined;
@@ -51,6 +53,8 @@ export async function GcLookupContent({
         floating box). Teams are ranked by how many unverified opponents they still have. Filter by
         age or state to focus.
       </p>
+
+      {headerExtra && <div className="mb-4">{headerExtra}</div>}
 
       {stats && <EarningsBar stats={stats} leaderboardHref={leaderboardHref} />}
 

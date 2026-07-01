@@ -145,20 +145,35 @@ async function enrichTeam(teamId: string, bodyText: string): Promise<void> {
   // locked the location (GameChanger sometimes reports a tournament's host city),
   // leave city/coords untouched.
   const data: Record<string, unknown> = {};
-  if (!t.locationLocked && !t.city && header.city) data.city = header.city;
+  if (!t.locationLocked) {
+    if (!t.city && header.city) data.city = header.city;
+    // State comes from the team's OWN page and is authoritative. Quick-added
+    // teams are created with a "UT" default, so a NV/CA/etc. team would otherwise
+    // stay mislabeled (e.g. "Henderson, UT"). Correct it whenever the page's
+    // state differs from what we have.
+    if (header.state && header.state !== t.state) data.state = header.state;
+  }
 
   // Coaching staff from the team's own page powers merge-confidence scoring.
   // Refresh whenever the page lists staff (authoritative, and rosters change).
   if (header.coaches.length > 0) data.coaches = header.coaches;
 
-  // Geocode to a centroid once we have a city but no coordinates, so the
-  // scrimmage finder can match by distance.
-  if (!t.locationLocked && t.latitude == null) {
+  // Geocode to a centroid when we first learn a city OR when the state was just
+  // corrected (so a mislabeled team isn't left pinned in the wrong state). If no
+  // centroid matches (e.g. an out-of-state city we don't bundle), clear stale
+  // coords rather than keep the wrong ones.
+  if (!t.locationLocked && (t.latitude == null || data.state != null)) {
     const cityForGeo = (data.city as string | undefined) ?? t.city;
-    const geo = geocodeCity(cityForGeo, t.state);
-    if (geo) {
-      data.latitude = geo.lat;
-      data.longitude = geo.lng;
+    const stateForGeo = (data.state as string | undefined) ?? t.state;
+    if (cityForGeo) {
+      const geo = geocodeCity(cityForGeo, stateForGeo);
+      if (geo) {
+        data.latitude = geo.lat;
+        data.longitude = geo.lng;
+      } else if (data.state != null) {
+        data.latitude = null;
+        data.longitude = null;
+      }
     }
   }
   // Age comes from the team's OWN page. Set it if missing, and ALSO advance it
