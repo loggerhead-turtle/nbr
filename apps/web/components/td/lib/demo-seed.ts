@@ -7,12 +7,14 @@
 
 import {
   generatePools,
+  summarizePools,
   buildTournamentSchedule,
   buildBracket as coreBuildBracket,
   type GradedField,
   type ScheduleDivisionInput,
   type BracketGameInput,
   type BracketResult,
+  type SeededTeam,
 } from "@nbr/core";
 import type {
   TdTournament,
@@ -20,6 +22,7 @@ import type {
   TdDivision,
   TdInvite,
   TdField,
+  TdTeamRef,
   FieldGrade,
   PaymentStatus,
 } from "./types";
@@ -203,6 +206,141 @@ function emptyTournament(over: Partial<TdTournament>): TdTournament {
   };
 }
 
+// ── RMSB Firecracker — real 12U Gold & Silver pools ─────────────────────────
+// A faithful reproduction of the pool groupings from the RMSB Firecracker 12U
+// Gold and Silver divisions, dropped into the NBR director tool so visitors can
+// see how a real event's pools look here. These clubs aren't in the demo DB, so
+// the NBR values are illustrative (chosen to preserve each division's published
+// seeding); there are no scores, schedule, or brackets — just the pool setup.
+// Team order within each pool is by NBR, which is how the tool seeds a pool.
+interface RmsbTeam {
+  name: string;
+  nbr: number;
+  state: string;
+}
+
+// Pools exactly as the event grouped them ("TEAMS - POOL 1/2/3" on RMSB).
+const RMSB_GOLD_POOLS: RmsbTeam[][] = [
+  [
+    { name: "Utah Gunners", nbr: 1852, state: "UT" },
+    { name: "Bear River Dirtbags", nbr: 1806, state: "UT" },
+    { name: "Bolts", nbr: 1770, state: "UT" },
+    { name: "Wasatch Black", nbr: 1724, state: "UT" },
+    { name: "Salt Lake Gators", nbr: 1699, state: "UT" },
+    { name: "RA Black", nbr: 1671, state: "UT" },
+  ],
+  [
+    { name: "Bombsquad", nbr: 1848, state: "UT" },
+    { name: "Orem Outlaws", nbr: 1799, state: "UT" },
+    { name: "Demons Baseball", nbr: 1762, state: "UT" },
+    { name: "Redbirds", nbr: 1718, state: "UT" },
+    { name: "UV Cougars", nbr: 1688, state: "UT" },
+  ],
+];
+
+const RMSB_SILVER_POOLS: RmsbTeam[][] = [
+  [
+    { name: "FCA Force", nbr: 1604, state: "UT" },
+    { name: "DC Sox", nbr: 1571, state: "UT" },
+    { name: "Saratoga Venom", nbr: 1548, state: "UT" },
+    { name: "Wayne Warhawks", nbr: 1518, state: "UT" },
+    { name: "Utah Bandits", nbr: 1499, state: "UT" },
+  ],
+  [
+    { name: "Idaho Falls Bandits", nbr: 1658, state: "ID" },
+    { name: "Cannons Baseball", nbr: 1641, state: "UT" },
+    { name: "Lehi Longhorns", nbr: 1556, state: "UT" },
+    { name: "Bambino Baseball", nbr: 1527, state: "UT" },
+    { name: "Nampa American", nbr: 1508, state: "ID" },
+    { name: "EM Nuggies", nbr: 1483, state: "UT" },
+  ],
+  [
+    { name: "Nampa National", nbr: 1622, state: "ID" },
+    { name: "Utah Minutemen", nbr: 1588, state: "UT" },
+    { name: "Madcats Red", nbr: 1539, state: "UT" },
+    { name: "Saratoga Bolts", nbr: 1491, state: "UT" },
+    { name: "Utah Sluggers", nbr: 1476, state: "UT" },
+  ],
+];
+
+/**
+ * Build one 12U division (Gold or Silver) on `t` with its teams invited (all
+ * paid — a completed event) and its pools set exactly as RMSB grouped them.
+ * No schedule or bracket is created.
+ */
+function addRmsbDivision(t: TdTournament, nbrLevel: string, poolTeams: RmsbTeam[][]): void {
+  const flat = poolTeams.flat();
+  const ratings = flat.map((tm) => tm.nbr);
+  const div = division("U12", nbrLevel, Math.min(...ratings), Math.max(...ratings));
+  t.divisions.push(div);
+
+  // Overall NBR seed across the division (1 = strongest) — for data integrity.
+  const seedByName = new Map<string, number>();
+  [...flat].sort((a, b) => b.nbr - a.nbr).forEach((tm, i) => seedByName.set(tm.name, i + 1));
+
+  const refByName = new Map<string, TdTeamRef>();
+  for (const tm of flat) {
+    const ref: TdTeamRef = {
+      id: sid("team"),
+      name: tm.name,
+      city: null,
+      state: tm.state,
+      ageGroup: "U12",
+      nbr: tm.nbr,
+      isProvisional: false,
+    };
+    refByName.set(tm.name, ref);
+    t.invites.push({
+      id: sid("inv"),
+      divisionId: div.id,
+      team: ref,
+      paymentStatus: "PAID",
+      isRepeatCustomer: false,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  // Each pool, teams ordered by NBR (how the tool ranks within a pool).
+  const buckets: SeededTeam[][] = poolTeams.map((pool) =>
+    [...pool]
+      .sort((a, b) => b.nbr - a.nbr)
+      .map((tm) => ({
+        id: refByName.get(tm.name)!.id,
+        name: tm.name,
+        rating: tm.nbr,
+        isProvisional: false,
+        state: tm.state,
+        seed: seedByName.get(tm.name)!,
+      })),
+  );
+  const pools = summarizePools(buckets);
+  // Match RMSB's numbered pool labels ("Pool 1", "Pool 2", ...).
+  pools.pools.forEach((p, i) => {
+    p.label = `Pool ${i + 1}`;
+  });
+  div.pools = pools;
+  t.advancementRules[div.id] = { ...DEFAULT_ADVANCEMENT };
+}
+
+/** RMSB Firecracker — 12U Gold + Silver pools only (no scores/schedule). */
+function buildRmsbFirecracker(): TdTournament {
+  const t = emptyTournament({
+    name: "RMSB Firecracker",
+    status: "FINALIZED",
+    startDate: "2026-07-03T00:00:00.000Z",
+    endDate: "2026-07-05T00:00:00.000Z",
+    location: "Utah",
+    entryFee: 675,
+    depositAmount: 200,
+    poolPlayGames: 3,
+    poolPlayGamesPerDay: 2,
+    fields: buildFields(),
+  });
+  addRmsbDivision(t, "Gold", RMSB_GOLD_POOLS);
+  addRmsbDivision(t, "Silver", RMSB_SILVER_POOLS);
+  return t;
+}
+
 export function buildDemoStore(): DemoStore {
   seq = 0;
   clubCursor = 0;
@@ -378,7 +516,11 @@ export function buildDemoStore(): DemoStore {
     fields: buildFields(),
   });
 
-  return { tournaments: [t1, t2, t3], umpires };
+  // ── Tournament 4: RMSB Firecracker — real 12U Gold/Silver pools. ──
+  // Listed first so it's the default selection on the public demo page.
+  const t4 = buildRmsbFirecracker();
+
+  return { tournaments: [t4, t1, t2, t3], umpires };
 }
 
 export { ADVANCEMENT_PRESETS };
