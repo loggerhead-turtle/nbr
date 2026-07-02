@@ -318,10 +318,61 @@ export interface DupPair {
   a: DupTeam;
   b: DupTeam;
   commonGames: SharedGame[];
-  /** Merge confidence (same model the scraper uses to auto-merge). */
+  /** Name/age/location/coach match score (the heat-map bar). */
   confidence: MergeScore;
   overlap: DupOverlap;
   recommendation: DupRecommendation;
+  /**
+   * Merge confidence as a percentage, driven by how cleanly the folded (ghost)
+   * record's games line up with the kept (verified) one. null when disqualified
+   * (different ages — never a duplicate). This is what the bulk-merge threshold
+   * compares against.
+   */
+  mergeConfidence: number | null;
+  /** Plain-English deductions explaining any drop below 100%. Empty at 100%. */
+  mergeReasons: string[];
+}
+
+export interface MergeConfidence {
+  /** 0–100, or null when the pair is disqualified (never a duplicate). */
+  pct: number | null;
+  /** Why it's below 100% (empty when a clean 100%). */
+  reasons: string[];
+}
+
+/**
+ * Compute merge confidence from the game overlap between the kept (verified)
+ * record and the folded (ghost) record `b`:
+ *  - 100 when every ghost game is on the verified team with an identical score;
+ *  - −1 for each shared game scored only "close" (within a couple runs) or that
+ *    differs beyond that (an off-score game is weaker evidence, not proof);
+ *  - a ghost game the verified team lacks entirely (wrong date/opponent) is a
+ *    bigger problem: the first caps confidence at 70, each additional one another
+ *    −10 (60, 50, …). Close-score penalties still apply on top of the cap.
+ * Different-age pairs are disqualified and return null.
+ */
+export function mergeConfidenceFrom(overlap: DupOverlap, disqualified: boolean): MergeConfidence {
+  if (disqualified) return { pct: null, reasons: ["Different ages — not the same team."] };
+
+  const closeOnly = Math.max(0, overlap.close - overlap.exact); // within tolerance, not identical
+  const scorePenalty = closeOnly + overlap.diffScore; // each off-score shared game costs 1%
+  const extra = overlap.uniqueB; // ghost games with no matching verified game
+  const cap = extra === 0 ? 100 : Math.max(10, 70 - (extra - 1) * 10);
+  const pct = Math.max(0, cap - scorePenalty);
+
+  const reasons: string[] = [];
+  if (extra === 1) {
+    reasons.push("the duplicate has 1 game the kept team doesn't (wrong date or opponent) — capped at 70%");
+  } else if (extra > 1) {
+    reasons.push(`the duplicate has ${extra} games the kept team doesn't — capped at ${cap}%`);
+  }
+  if (closeOnly > 0) {
+    reasons.push(`${closeOnly} shared game${closeOnly === 1 ? "" : "s"} scored close but not identical (−${closeOnly}%)`);
+  }
+  if (overlap.diffScore > 0) {
+    reasons.push(`${overlap.diffScore} shared game${overlap.diffScore === 1 ? "" : "s"} scored differently (−${overlap.diffScore}%)`);
+  }
+  return { pct, reasons };
 }
 
 async function loadDupTeam(
@@ -383,42 +434,26 @@ async function loadDupTeam(
   return { team, byKey };
 }
 
-/**
- * Is this pair safe to merge unattended ("100% confident")? Every condition is a
- * hard requirement:
- *  1. the confidence model scores it a full 100% and doesn't disqualify it
- *     (identical name, same age, same city/state, shared coaches, lined-up games);
- *  2. every shared game has *identical* scores — no "close within tolerance" (≈)
- *     and nothing that differs; and
- *  3. the folded (ghost/merge-in) record is fully contained in the kept
- *     (verified) one — it has no game the kept team lacks.
- */
-export function isConfidentMerge(p: DupPair): boolean {
-  const c = p.confidence;
-  if (c.disqualified || c.score < 100) return false;
-  const o = p.overlap;
-  // (2) All shared games identical: `close` counts within-tolerance games
-  // (includes exact), so close === exact means none are merely ≈, and
-  // diffScore === 0 means none differ.
-  const allScoresExact = o.close === o.exact && o.diffScore === 0;
-  // (3) The merge-in record (b) has zero games the kept record (a) lacks.
-  const ghostFullyContained = o.uniqueB === 0;
-  return allScoresExact && ghostFullyContained;
+/** True when a pair's merge confidence meets the given threshold percentage. */
+export function pairMeetsThreshold(p: DupPair, minPct: number): boolean {
+  return p.mergeConfidence != null && p.mergeConfidence >= minPct;
 }
 
 /**
- * The duplicate candidates safe to merge unattended (see isConfidentMerge),
- * returned in merge orientation (source folds into the kept target), matching
- * the review page's keep/merge choice. Powers the bulk "merge all 100%
- * confident" action. `limit` bounds how many candidates are scored (same order
- * the review page uses: strongest evidence first).
+ * Duplicate candidates whose merge confidence is at least `minPct`, returned in
+ * merge orientation (source folds into the kept target), matching the review
+ * page's keep/merge choice. Powers the threshold-based bulk merge. `limit` bounds
+ * how many candidates are scored per call (same order the review page uses:
+ * strongest evidence first) so a single request stays fast even with a large
+ * backlog — the caller re-runs to work through the rest.
  */
-export async function getConfidentDuplicateMerges(
-  limit = 60,
+export async function getDuplicateMergesAtLeast(
+  minPct: number,
+  limit = 300,
 ): Promise<{ sourceId: string; targetId: string }[]> {
   const pairs = await getDuplicateCandidates(limit);
   return pairs
-    .filter(isConfidentMerge)
+    .filter((p) => pairMeetsThreshold(p, minPct))
     .map((p) => ({ sourceId: p.b.id, targetId: p.a.id }));
 }
 
@@ -523,14 +558,34 @@ export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
       };
     }
 
-    out.push({ a, b, commonGames, confidence, overlap, recommendation });
+    // Game-overlap merge confidence (the % the bulk threshold compares against).
+    // When it's below 100 and still mergeable, spell out why right in the note so
+    // the admin can look closer before merging.
+    const mc = mergeConfidenceFrom(overlap, confidence.disqualified);
+    if (!confidence.disqualified && mc.pct != null) {
+      recommendation.note +=
+        mc.pct >= 100
+          ? ` Merge confidence 100% — every shared game matches and the duplicate has no extra games.`
+          : ` Merge confidence ${mc.pct}% — ${mc.reasons.join("; ")}.`;
+    }
+
+    out.push({
+      a,
+      b,
+      commonGames,
+      confidence,
+      overlap,
+      recommendation,
+      mergeConfidence: mc.pct,
+      mergeReasons: mc.reasons,
+    });
   }
   // Real candidates first; different-age (disqualified) pairs sink to the bottom
-  // — they can never be merged here — then by confidence and shared-game count.
+  // — they can never be merged here — then by merge confidence, then shared games.
   return out.sort(
     (x, y) =>
       Number(x.confidence.disqualified) - Number(y.confidence.disqualified) ||
-      y.confidence.score - x.confidence.score ||
+      (y.mergeConfidence ?? -1) - (x.mergeConfidence ?? -1) ||
       y.commonGames.length - x.commonGames.length,
   );
 }

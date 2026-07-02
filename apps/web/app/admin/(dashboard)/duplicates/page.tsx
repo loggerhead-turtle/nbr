@@ -1,13 +1,17 @@
-import { getDuplicateCandidates, isConfidentMerge } from "@/lib/duplicates";
+import { getDuplicateCandidates } from "@/lib/duplicates";
 import { DuplicateReview } from "@/components/admin/duplicate-review";
-import { MergeConfidentButton } from "@/components/admin/merge-confident-button";
+import { MergeByConfidence } from "@/components/admin/merge-by-confidence";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Possible duplicates", robots: { index: false } };
 
 export default async function DuplicatesPage() {
   const pairs = await getDuplicateCandidates(60);
-  const confidentCount = pairs.filter(isConfidentMerge).length;
+  // Merge-confidence values of the mergeable (non-disqualified) listed pairs,
+  // so the threshold control can show a live count.
+  const confidences = pairs
+    .map((p) => p.mergeConfidence)
+    .filter((c): c is number => c != null);
 
   return (
     <div>
@@ -49,7 +53,7 @@ export default async function DuplicatesPage() {
           merge there and the phantom shared games (and this false pairing) disappear.
         </p>
       </div>
-      <MergeConfidentButton count={confidentCount} />
+      <MergeByConfidence confidences={confidences} />
       <DuplicateReview initialPairs={pairs} />
     </div>
   );

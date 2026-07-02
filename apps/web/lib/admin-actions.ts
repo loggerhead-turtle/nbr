@@ -70,7 +70,7 @@ import {
   isAdmin,
 } from "./auth";
 import { isCurrentUserScraper, getCurrentUser, hashPassword } from "./user-auth";
-import { getConfidentDuplicateMerges, countDuplicateCandidates } from "./duplicates";
+import { getDuplicateMergesAtLeast, countDuplicateCandidates } from "./duplicates";
 import { formatUsd } from "./format";
 
 export interface ActionState {
@@ -861,17 +861,26 @@ export async function setTdStatusAction(formData: FormData): Promise<void> {
   revalidatePath("/admin");
 }
 
+/** How many pairs one bulk-merge click processes (keeps a request fast). */
+const MERGE_BATCH = 300;
+
 /**
- * Bulk-merge every duplicate pair the confidence model scores at 100% (and that
- * isn't disqualified). Each source folds into its kept target — nothing is lost.
- * A team already merged away in this pass is skipped (its remaining pairs
- * resurface on the next scan), then ratings recompute once at the end.
+ * Bulk-merge every duplicate pair whose merge confidence is at least the
+ * admin-chosen threshold (e.g. 100, 99, 96). Each source folds into its kept
+ * target — nothing is lost. A team already merged away in this pass is skipped
+ * (its remaining pairs resurface on the next scan). Processes up to MERGE_BATCH
+ * pairs per click and reports how many remain so the admin can keep going.
  */
-export async function mergeConfidentDuplicatesAction(): Promise<ActionState> {
+export async function mergeDuplicatesByConfidenceAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
   await requireAdmin();
-  const merges = await getConfidentDuplicateMerges();
+  const minPct = Math.max(1, Math.min(100, Math.round(Number(formData.get("minPct")) || 100)));
+
+  const merges = await getDuplicateMergesAtLeast(minPct, MERGE_BATCH);
   if (merges.length === 0) {
-    return { ok: true, message: "No 100%-confident duplicates to merge." };
+    return { ok: true, message: `No duplicates at ${minPct}% confidence or higher right now.` };
   }
 
   const deleted = new Set<string>();
@@ -894,9 +903,9 @@ export async function mergeConfidentDuplicatesAction(): Promise<ActionState> {
   return {
     ok: true,
     message:
-      `Merged ${merged} 100%-confident duplicate${merged === 1 ? "" : "s"}${merged > 0 ? " — ratings recompute started." : "."}` +
+      `Merged ${merged} duplicate${merged === 1 ? "" : "s"} at ≥${minPct}% confidence${merged > 0 ? " — ratings recompute started." : "."}` +
       (remaining > 0
-        ? ` ${remaining} possible duplicate${remaining === 1 ? "" : "s"} still need a look.`
+        ? ` ${remaining} possible duplicate${remaining === 1 ? "" : "s"} remain — run it again to keep going.`
         : ""),
   };
 }

@@ -184,6 +184,14 @@ function DupCard({ pair, onResolved }: { pair: DupPair; onResolved: (key: string
         className={`flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-2 text-sm ${REC_STYLE[rec.kind].box}`}
       >
         <span className="font-semibold">{REC_STYLE[rec.kind].label}</span>
+        {pair.mergeConfidence != null && (
+          <span
+            title="How cleanly the duplicate's games line up with the kept team"
+            className="rounded-full bg-navy-900 px-2 py-0.5 text-xs font-bold text-white"
+          >
+            {pair.mergeConfidence}% merge conf.
+          </span>
+        )}
         <span className="text-slate-600">{rec.note}</span>
         <span className="ml-auto flex flex-wrap gap-1.5 text-xs">
           <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800">
