@@ -946,12 +946,13 @@ export async function startDuplicateBacklogAction(
   if (!dispatched) {
     await finishDuplicateMergeRun(run.id, {
       status: "FAILED",
-      error: "Worker not configured (RENDER_API_KEY / RENDER_WORKER_SERVICE_ID unset).",
+      error:
+        "Merge worker not configured (RENDER_API_KEY and RENDER_MERGE_SERVICE_ID, or RENDER_WORKER_SERVICE_ID, unset).",
     });
     revalidatePath("/admin/duplicates-backlog");
     return {
       error:
-        "Couldn't start the worker job. Set RENDER_API_KEY and RENDER_WORKER_SERVICE_ID (see server logs).",
+        "Couldn't start the merge worker. Set RENDER_API_KEY and RENDER_MERGE_SERVICE_ID (the nbr-merge service).",
     };
   }
 

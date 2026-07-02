@@ -33,6 +33,11 @@ envVarGroups:
         sync: false
       - key: RENDER_WORKER_SERVICE_ID
         sync: false
+      # Dedicated worker for the duplicate-backlog merge (no Chromium). Set this
+      # to the nbr-merge service's ID so merging runs on its own service, apart
+      # from the scraper. If left blank, merging falls back to nbr-scraper.
+      - key: RENDER_MERGE_SERVICE_ID
+        sync: false
       # Scraper controls. Leave disabled until you're ready.
       - key: SCRAPER_ENABLED
         value: "false"
@@ -122,6 +127,24 @@ services:
     buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm --filter @nbr/db generate
     startCommand: pnpm --filter @nbr/worker recompute
     schedule: "0 8 * * 0,3"
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - fromGroup: nbr
+
+  # Duplicate-backlog merge worker. Separate from the scraper: no Chromium, plain
+  # Node, and autoDeploy so shared merge/duplicate code reaches it on every push
+  # without rebuilding the expensive scraper image. Merging never scrapes.
+  # Runs are triggered on demand from /admin/duplicates-backlog (one-off Jobs via
+  # the Render API); the schedule is a far-future placeholder. Point
+  # RENDER_MERGE_SERVICE_ID at this service's ID after the blueprint creates it.
+  - type: cron
+    name: nbr-merge
+    runtime: node
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm --filter @nbr/db generate
+    startCommand: pnpm --filter @nbr/worker merge-duplicates
+    schedule: "0 9 1 1 *" # 09:00 on Jan 1 (placeholder; triggered manually)
     autoDeploy: true
     envVars:
       - key: NODE_VERSION

@@ -24,12 +24,14 @@ const GC_ID = /^[A-Za-z0-9]+$/;
  * is unconfigured or the call failed — so callers can tell the admin whether
  * anything really happened instead of the trigger being a silent no-op.
  */
-async function postJob(startCommand: string): Promise<boolean> {
+async function postJob(startCommand: string, serviceIdOverride?: string): Promise<boolean> {
   const apiKey = process.env.RENDER_API_KEY;
-  const serviceId = process.env.RENDER_WORKER_SERVICE_ID;
+  // Default target is the scraper (has Chromium); callers can override to run on
+  // a different worker service (e.g. the dedicated duplicate-merge worker).
+  const serviceId = serviceIdOverride || process.env.RENDER_WORKER_SERVICE_ID;
   if (!apiKey || !serviceId) {
     console.warn(
-      "[render-jobs] RENDER_API_KEY / RENDER_WORKER_SERVICE_ID not set — " +
+      "[render-jobs] RENDER_API_KEY / worker service id not set — " +
         "skipping one-off job (relying on the scheduled scraper).",
     );
     return false;
@@ -88,9 +90,14 @@ export async function triggerRecompute(): Promise<boolean> {
  * Background duplicate-backlog merge: fold every pair at/above `minPct` confidence
  * into its kept record. `runId` (a cuid) ties the worker's progress + log to the
  * run row the web app created, so the admin page can watch it.
+ *
+ * Runs on its OWN worker service (RENDER_MERGE_SERVICE_ID) — no Chromium, and
+ * decoupled from the scraper so deploying or running one never touches the other.
+ * Falls back to the scraper service only if the dedicated id isn't set yet.
  */
 export async function triggerMergeDuplicates(minPct: number, runId: string): Promise<boolean> {
   const pct = Math.max(1, Math.min(100, Math.round(minPct)));
   if (!/^[a-z0-9]+$/i.test(runId)) return false;
-  return postJob(`pnpm --filter @nbr/worker merge-duplicates ${pct} ${runId}`);
+  const serviceId = process.env.RENDER_MERGE_SERVICE_ID || process.env.RENDER_WORKER_SERVICE_ID;
+  return postJob(`pnpm --filter @nbr/worker merge-duplicates ${pct} ${runId}`, serviceId);
 }
