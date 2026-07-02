@@ -70,6 +70,7 @@ import {
   isAdmin,
 } from "./auth";
 import { isCurrentUserScraper, getCurrentUser, hashPassword } from "./user-auth";
+import { getConfidentDuplicateMerges, countDuplicateCandidates } from "./duplicates";
 import { formatUsd } from "./format";
 
 export interface ActionState {
@@ -858,6 +859,46 @@ export async function setTdStatusAction(formData: FormData): Promise<void> {
     });
   }
   revalidatePath("/admin");
+}
+
+/**
+ * Bulk-merge every duplicate pair the confidence model scores at 100% (and that
+ * isn't disqualified). Each source folds into its kept target — nothing is lost.
+ * A team already merged away in this pass is skipped (its remaining pairs
+ * resurface on the next scan), then ratings recompute once at the end.
+ */
+export async function mergeConfidentDuplicatesAction(): Promise<ActionState> {
+  await requireAdmin();
+  const merges = await getConfidentDuplicateMerges();
+  if (merges.length === 0) {
+    return { ok: true, message: "No 100%-confident duplicates to merge." };
+  }
+
+  const deleted = new Set<string>();
+  let merged = 0;
+  for (const { sourceId, targetId } of merges) {
+    // Skip if either side was already folded away this pass — mergeTeams would
+    // no-op on the missing team, and the leftover pair resurfaces next scan.
+    if (deleted.has(sourceId) || deleted.has(targetId)) continue;
+    await mergeTeams(sourceId, targetId);
+    deleted.add(sourceId);
+    merged += 1;
+  }
+
+  if (merged > 0) await triggerRecompute();
+  revalidatePath("/admin/duplicates");
+  revalidatePath("/admin/audit");
+  revalidatePath("/");
+
+  const remaining = await countDuplicateCandidates().catch(() => 0);
+  return {
+    ok: true,
+    message:
+      `Merged ${merged} 100%-confident duplicate${merged === 1 ? "" : "s"}${merged > 0 ? " — ratings recompute started." : "."}` +
+      (remaining > 0
+        ? ` ${remaining} possible duplicate${remaining === 1 ? "" : "s"} still need a look.`
+        : ""),
+  };
 }
 
 export async function dismissDuplicateAction(formData: FormData): Promise<void> {

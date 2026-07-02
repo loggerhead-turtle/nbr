@@ -1,11 +1,15 @@
 import { getDuplicateCandidates } from "@/lib/duplicates";
 import { DuplicateReview } from "@/components/admin/duplicate-review";
+import { MergeConfidentButton } from "@/components/admin/merge-confident-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Possible duplicates", robots: { index: false } };
 
 export default async function DuplicatesPage() {
   const pairs = await getDuplicateCandidates(60);
+  const confidentCount = pairs.filter(
+    (p) => !p.confidence.disqualified && p.confidence.score >= 100,
+  ).length;
 
   return (
     <div>
@@ -47,6 +51,7 @@ export default async function DuplicatesPage() {
           merge there and the phantom shared games (and this false pairing) disappear.
         </p>
       </div>
+      <MergeConfidentButton count={confidentCount} />
       <DuplicateReview initialPairs={pairs} />
     </div>
   );

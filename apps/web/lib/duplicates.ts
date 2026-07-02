@@ -383,6 +383,23 @@ async function loadDupTeam(
   return { team, byKey };
 }
 
+/**
+ * The duplicate candidates the confidence model scores at a full 100% (and that
+ * aren't disqualified) — the ones an admin trusts enough to merge unattended.
+ * Returned in merge orientation (source folds into the kept target), matching
+ * the review page's keep/merge choice. Powers the bulk "merge all 100%
+ * confident" action. `limit` bounds how many candidates are scored (same order
+ * the review page uses: strongest evidence first).
+ */
+export async function getConfidentDuplicateMerges(
+  limit = 60,
+): Promise<{ sourceId: string; targetId: string }[]> {
+  const pairs = await getDuplicateCandidates(limit);
+  return pairs
+    .filter((p) => !p.confidence.disqualified && p.confidence.score >= 100)
+    .map((p) => ({ sourceId: p.b.id, targetId: p.a.id }));
+}
+
 export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
   const pairs = await getCandidatePairs();
   const out: DupPair[] = [];
