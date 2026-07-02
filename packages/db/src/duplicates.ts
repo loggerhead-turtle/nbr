@@ -376,7 +376,18 @@ export function mergeConfidenceFrom(overlap: DupOverlap, disqualified: boolean):
   return { pct, reasons };
 }
 
-async function loadDupTeam(
+type LoadedDupTeam = { team: DupTeam; byKey: Map<string, DupGame & { oppId: string }> } | null;
+/** Per-scan cache so a team shared across many candidate pairs is loaded once. */
+type DupTeamCache = Map<string, LoadedDupTeam>;
+
+async function loadDupTeam(id: string, cache?: DupTeamCache): Promise<LoadedDupTeam> {
+  if (cache?.has(id)) return cache.get(id)!;
+  const loaded = await loadDupTeamUncached(id);
+  cache?.set(id, loaded);
+  return loaded;
+}
+
+async function loadDupTeamUncached(
   id: string,
 ): Promise<{ team: DupTeam; byKey: Map<string, DupGame & { oppId: string }> } | null> {
   const t = await prisma.team.findUnique({
@@ -451,14 +462,30 @@ export function pairMeetsThreshold(p: DupPair, minPct: number): boolean {
 export async function getDuplicateMergesAtLeast(
   minPct: number,
   limit = 300,
-): Promise<{ sourceId: string; targetId: string; confidence: number }[]> {
+): Promise<
+  {
+    sourceId: string;
+    targetId: string;
+    confidence: number;
+    keptName: string;
+    mergedName: string;
+    gamesMoved: number;
+  }[]
+> {
   const pairs = await getDuplicateCandidates({ limit, scan: limit, minPct });
-  return pairs.map((p) => ({ sourceId: p.b.id, targetId: p.a.id, confidence: p.mergeConfidence ?? minPct }));
+  return pairs.map((p) => ({
+    sourceId: p.b.id,
+    targetId: p.a.id,
+    confidence: p.mergeConfidence ?? minPct,
+    keptName: p.a.name,
+    mergedName: p.b.name,
+    gamesMoved: p.b.totalGames,
+  }));
 }
 
 /** Score a single candidate pair into a full DupPair (or null if a team is gone). */
-async function buildDupPair(aId: string, bId: string): Promise<DupPair | null> {
-  const [ra, rb] = await Promise.all([loadDupTeam(aId), loadDupTeam(bId)]);
+async function buildDupPair(aId: string, bId: string, cache?: DupTeamCache): Promise<DupPair | null> {
+  const [ra, rb] = await Promise.all([loadDupTeam(aId, cache), loadDupTeam(bId, cache)]);
   if (!ra || !rb) return null;
 
   const commonGames: SharedGame[] = [];
@@ -604,9 +631,12 @@ export async function getDuplicateCandidates(query: number | DuplicateQuery = 60
   const scan = Math.max(limit, opts.scan ?? (filtering ? 500 : limit));
 
   const pairs = await getCandidatePairs();
+  // The scan is read-only (no merges happen here), so caching each team's loaded
+  // games makes a deep scan load every team just once instead of once per pair.
+  const cache: DupTeamCache = new Map();
   const out: DupPair[] = [];
   for (const [aId, bId] of pairs.slice(0, scan)) {
-    const dp = await buildDupPair(aId, bId);
+    const dp = await buildDupPair(aId, bId, cache);
     if (!dp) continue;
     if (filtering) {
       // Disqualified pairs have no merge confidence — a confidence filter hides them.
@@ -715,49 +745,46 @@ export async function getDuplicateMergeLogs(runId: string, limit = 500): Promise
 }
 
 /**
- * Work through the duplicate backlog: repeatedly pull the pairs at or above
- * `minPct` confidence and fold each into its kept record, logging every merge to
- * the run. Re-scans each round so chains and the next batch surface, until no
- * qualifying pairs remain (or a safety cap is hit). No request timeout applies —
- * this runs on the worker.
+ * Work through the WHOLE duplicate backlog: each round scans every candidate
+ * pair (not just the top slice — this is the worker, no request timeout), folds
+ * every pair at/above `minPct` confidence into its kept record, and logs it.
+ * Re-scans between rounds so chains and newly-exposed pairs surface, until a
+ * round merges nothing. `scan` bounds how many candidates are scored per round
+ * (default 100k ≈ all); `maxRounds` is a safety stop.
  */
 export async function mergeDuplicateBacklog(opts: {
   minPct: number;
   runId: string;
-  batch?: number;
+  scan?: number;
   maxRounds?: number;
 }): Promise<{ merged: number; rounds: number }> {
-  const batch = opts.batch ?? 300;
-  const maxRounds = opts.maxRounds ?? 500;
+  const scan = opts.scan ?? 100_000;
+  const maxRounds = opts.maxRounds ?? 40;
   let merged = 0;
   let rounds = 0;
 
   for (; rounds < maxRounds; rounds++) {
-    const candidates = await getDuplicateMergesAtLeast(opts.minPct, batch);
+    // Scan the entire candidate list at this threshold (cached per scan, so each
+    // team is loaded once). Returns every qualifying pair, not a top-N slice.
+    const candidates = await getDuplicateMergesAtLeast(opts.minPct, scan);
+    console.log(
+      `[merge-duplicates] round ${rounds + 1}: ${candidates.length} pair(s) at >= ${opts.minPct}% confidence`,
+    );
     if (candidates.length === 0) break;
 
     const deleted = new Set<string>();
     let roundMerged = 0;
-    for (const { sourceId, targetId, confidence } of candidates) {
+    // Names + game count come from the scan, so no extra query per merge.
+    for (const { sourceId, targetId, confidence, keptName, mergedName, gamesMoved } of candidates) {
       if (deleted.has(sourceId) || deleted.has(targetId)) continue;
-      // Capture names + moved-game count before the merge deletes the source.
-      const [src, tgt] = await Promise.all([
-        prisma.team.findUnique({
-          where: { id: sourceId },
-          select: { name: true, _count: { select: { homeGames: true, awayGames: true } } },
-        }),
-        prisma.team.findUnique({ where: { id: targetId }, select: { name: true } }),
-      ]);
-      if (!src || !tgt) continue;
-      const gamesMoved = src._count.homeGames + src._count.awayGames;
 
       await mergeTeams(sourceId, targetId);
       await prisma.duplicateMergeLog.create({
         data: {
           runId: opts.runId,
           keptTeamId: targetId,
-          keptName: tgt.name,
-          mergedName: src.name,
+          keptName,
+          mergedName,
           confidence,
           gamesMoved,
         },
@@ -765,9 +792,14 @@ export async function mergeDuplicateBacklog(opts: {
       deleted.add(sourceId);
       merged += 1;
       roundMerged += 1;
+      // Persist progress periodically so the admin page reflects a long round.
+      if (roundMerged % 50 === 0) {
+        await prisma.duplicateMergeRun.update({ where: { id: opts.runId }, data: { merged } });
+      }
     }
 
     await prisma.duplicateMergeRun.update({ where: { id: opts.runId }, data: { merged } });
+    console.log(`[merge-duplicates] round ${rounds + 1}: merged ${roundMerged}`);
     if (roundMerged === 0) break; // no progress — avoid looping forever
   }
 
