@@ -4,15 +4,16 @@ import { isAdmin } from "@/lib/auth";
 import { logoutAction } from "@/lib/admin-actions";
 import { countDuplicateCandidates } from "@/lib/duplicates";
 import { getActivitySeenMap, countNewActivityByType } from "@/lib/activity";
-import { countGhostTeams } from "@nbr/db";
+import { countGhostTeams, countOpenGameMergeCandidates } from "@nbr/db";
 import { AdminQuickActions } from "@/components/admin/admin-quick-actions";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   if (!(await isAdmin())) redirect("/admin/login");
 
-  const [dupCount, ghostCount, activityCount] = await Promise.all([
+  const [dupCount, ghostCount, gameMergeCount, activityCount] = await Promise.all([
     countDuplicateCandidates(),
     countGhostTeams().catch(() => 0),
+    countOpenGameMergeCandidates().catch(() => 0),
     getActivitySeenMap()
       .then((m) => countNewActivityByType(m))
       .then((c) => Object.values(c).reduce((a, b) => a + b, 0))
@@ -94,6 +95,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             className="rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
           >
             Merge queue
+          </Link>
+          <Link
+            href="/admin/game-merge"
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-navy-800 hover:bg-slate-100"
+          >
+            Game merge
+            {gameMergeCount > 0 && (
+              <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-amber-600 px-1.5 py-0.5 text-xs font-bold text-white">
+                {gameMergeCount > 99 ? "99+" : gameMergeCount}
+              </span>
+            )}
           </Link>
           <Link
             href="/admin/gc-lookup"

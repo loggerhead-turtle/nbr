@@ -190,6 +190,12 @@ model Game {
   neutralSite Boolean @default(false)
 
   source GameSource @default(SCRAPE)
+  // The team whose scrape produced this row. Lets us tell a real doubleheader
+  // (two legs from the SAME team's schedule) apart from a cross-team duplicate
+  // (one game listed on both teams' schedules) — the two look identical by
+  // opponent + day + score, so the source is the only reliable discriminator.
+  // Null for manual entries and rows created before this column existed.
+  sourceTeamId String?
   // Set when a rating run has incorporated this game (enables idempotent reruns).
   ratedAt DateTime?
 
@@ -313,6 +319,32 @@ model DuplicateDismissal {
   createdAt DateTime @default(now())
 
   @@unique([teamIdA, teamIdB])
+}
+
+// A same-day matchup where the two teams' schedules disagree on how many games
+// they played each other (e.g. one lists a doubleheader, the other lists one
+// game). We can't tell a real doubleheader from a double-entered single game, so
+// the matchup is parked here for an admin to resolve on the Game merge queue
+// instead of silently collapsing (which would drop a real game) or feeding the
+// team Duplicates page (which would falsely suggest the teams are the same
+// record). Teams stored canonically (teamIdA < teamIdB); one row per matchup+day.
+model GameMergeCandidate {
+  id      String @id @default(cuid())
+  teamIdA String
+  teamIdB String
+  // The calendar day of the matchup, "YYYY-MM-DD".
+  day String
+  // How many games each side's own schedule lists for this matchup that day.
+  countA Int
+  countB Int
+  // "open" (needs review) or "resolved" (an admin acted / dismissed it).
+  status     String    @default("open")
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([teamIdA, teamIdB, day])
+  @@index([status])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

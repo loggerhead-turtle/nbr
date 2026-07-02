@@ -20,8 +20,10 @@ import {
   setScrapeGoals,
   recordScrapeCredits,
   recordPayout,
+  resolveGameMergeCandidate,
   GHOST_MERGE_DISMISSALS_KEY,
   type GhostSplitGroup,
+  type GameMergeResolution,
 } from "@nbr/db";
 import {
   createTeamSchema,
@@ -562,6 +564,22 @@ export async function dismissGhostMergeAction(formData: FormData): Promise<void>
     // ignore — dismissing is best-effort
   }
   revalidatePath("/admin/merge-queue");
+  revalidatePath("/");
+}
+
+/**
+ * Resolve a Game merge queue conflict (a same-day matchup whose two teams'
+ * schedules disagree on the game count). "doubleheader" keeps the real legs and
+ * drops the other side's duplicate, "single" collapses to one game, "dismiss"
+ * just closes it. Recompute ratings after a collapse — the game graph changed.
+ */
+export async function resolveGameMergeAction(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("candidateId") ?? "").trim();
+  const resolution = String(formData.get("resolution") ?? "") as GameMergeResolution;
+  if (!id || !["doubleheader", "single", "dismiss"].includes(resolution)) return;
+  await resolveGameMergeCandidate(id, resolution);
+  revalidatePath("/admin/game-merge");
   revalidatePath("/");
 }
 

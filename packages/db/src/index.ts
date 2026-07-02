@@ -38,6 +38,7 @@ export {
   reassignTeamGames,
   getGhostDetail,
   getGhostMergeQueue,
+  deleteTbdTeams,
   refreshTeamPendingMerge,
   getLookupTeams,
   getLookupStates,
@@ -82,3 +83,14 @@ export type {
   LeaderboardRow,
   PayoutResult,
 } from "./scrape-credits";
+export {
+  getOpenGameMergeCandidates,
+  countOpenGameMergeCandidates,
+  resolveGameMergeCandidate,
+} from "./game-merge";
+export type {
+  GameMergeCandidateView,
+  GameMergeSide,
+  GameMergeStoredGame,
+  GameMergeResolution,
+} from "./game-merge";
