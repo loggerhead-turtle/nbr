@@ -1,5 +1,6 @@
 "use server";
 
+import { randomInt } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -68,7 +69,7 @@ import {
   createSessionToken,
   isAdmin,
 } from "./auth";
-import { isCurrentUserScraper, getCurrentUser } from "./user-auth";
+import { isCurrentUserScraper, getCurrentUser, hashPassword } from "./user-auth";
 import { formatUsd } from "./format";
 
 export interface ActionState {
@@ -709,6 +710,97 @@ export async function setUserRoleAction(formData: FormData): Promise<void> {
     data: { role: role as "ADMIN" | "USER" | "GAME_SCRAPER" },
   });
   revalidatePath("/admin/users");
+}
+
+/**
+ * Generate a readable, crypto-random password. Omits ambiguous characters
+ * (0/O, 1/l/I) so it survives being read aloud or copied by hand.
+ */
+function generatePassword(length = 14): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  let out = "";
+  for (let i = 0; i < length; i++) out += alphabet[randomInt(alphabet.length)];
+  return out;
+}
+
+/**
+ * Admin-set password: type a specific password for a user to sign in with. Sends
+ * the user a security notice (never the password itself — the admin relays it).
+ */
+export async function setUserPasswordAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  const password = String(formData.get("password") ?? "");
+  if (!userId) return { error: "Missing user." };
+  if (password.length < 8) return { error: "Password must be at least 8 characters." };
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  if (!user) return { error: "User not found." };
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await hashPassword(password) },
+  });
+
+  // Best-effort heads-up so the change isn't silent. Never includes the password.
+  await sendEmail({
+    to: user.email,
+    subject: "Your National Baseball Ratings password was changed",
+    html: emailLayout(
+      "Password changed",
+      `<p>An administrator set a new password on your account. If you weren't expecting this, please contact us right away.</p>`,
+      { label: "Sign in", url: siteUrl("/login") },
+    ),
+  });
+
+  revalidatePath("/admin/users");
+  return { ok: true, message: `Password updated for ${user.email}.` };
+}
+
+/**
+ * Password reset: generate a new random password, set it, and email it to the
+ * user. When email isn't configured, the new password is returned to the admin
+ * so they can pass it along manually.
+ */
+export async function resetUserPasswordAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const userId = String(formData.get("userId") ?? "");
+  if (!userId) return { error: "Missing user." };
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  if (!user) return { error: "User not found." };
+
+  const password = generatePassword();
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: await hashPassword(password) },
+  });
+
+  await sendEmail({
+    to: user.email,
+    subject: "Your new National Baseball Ratings password",
+    html: emailLayout(
+      "Password reset",
+      `<p>An administrator reset your password. Your new password is:</p>
+       <p style="font-size:18px;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:1px;">${password}</p>
+       <p>Use it to sign in. If you didn't request this, contact us right away.</p>`,
+      { label: "Sign in", url: siteUrl("/login") },
+    ),
+  });
+
+  revalidatePath("/admin/users");
+  return {
+    ok: true,
+    message: process.env.RESEND_API_KEY
+      ? `New password emailed to ${user.email}.`
+      : `Email isn't configured — give ${user.email} this password: ${password}`,
+  };
 }
 
 /** Save the game-scraper pay rate (cents/team) and period goals (teams). */

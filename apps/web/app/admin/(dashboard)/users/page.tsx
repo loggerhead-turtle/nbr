@@ -1,6 +1,7 @@
 import { prisma, Prisma } from "@nbr/db";
 import { setTdStatusAction, setUserRoleAction } from "@/lib/admin-actions";
 import { formatDate } from "@/lib/format";
+import { UserPasswordControls } from "@/components/admin/user-password-controls";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Manage users", robots: { index: false } };
@@ -81,7 +82,8 @@ export default async function AdminUsersPage({
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-col items-end gap-2">
+                    <div className="flex justify-end gap-2">
                     {u.role !== "ADMIN" ? (
                       <form action={setUserRoleAction}>
                         <input type="hidden" name="userId" value={u.id} />
@@ -121,6 +123,8 @@ export default async function AdminUsersPage({
                         <button className="btn-ghost text-rose-600">Revoke TD</button>
                       </form>
                     )}
+                    </div>
+                    <UserPasswordControls userId={u.id} email={u.email} />
                   </div>
                 </td>
               </tr>
