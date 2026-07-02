@@ -8,7 +8,7 @@ const NAV = [
   { href: "/map", label: "Map" },
   { href: "/submit-team", label: "Add Team" },
   { href: "/about", label: "About" },
-  { href: "/account", label: "Coaches" },
+  { href: "/account", label: "Log in" },
 ];
 
 export function SiteHeader() {

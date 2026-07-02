@@ -8,6 +8,7 @@ import { respondScrimmageRequestAction, cancelScrimmageRequestAction } from "@/l
 import { respondTournamentInviteAction } from "@/lib/tournament-actions";
 import { markAllMessagesReadAction } from "@/lib/message-actions";
 import { ScrimmageSettings } from "@/components/account/scrimmage-settings";
+import { ProfileSettings } from "@/components/account/profile-settings";
 import { TeamWebsiteForm } from "@/components/account/team-website-form";
 import { TdRequestForm } from "@/components/account/td-request";
 import { RolloverPrompt } from "@/components/account/rollover-prompt";
@@ -25,7 +26,17 @@ export default async function AccountPage() {
   const [account, claims, currentSeasonYear] = await Promise.all([
     prisma.user.findUnique({
       where: { id: user.id },
-      select: { tdStatus: true, tdTournamentName: true, tdOrg: true, tdWebsite: true },
+      select: {
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: true,
+        passwordHash: true,
+        tdStatus: true,
+        tdTournamentName: true,
+        tdOrg: true,
+        tdWebsite: true,
+      },
     }),
     prisma.claim.findMany({
       where: { userId: user.id },
@@ -99,6 +110,22 @@ export default async function AccountPage() {
           Admin dashboard →
         </Link>
       )}
+
+      {/* Profile & settings — edit name, email, phone, and password */}
+      <section className="mt-8">
+        <h2 className="text-lg font-bold text-navy-900">Profile &amp; settings</h2>
+        <div className="mt-3">
+          <ProfileSettings
+            values={{
+              firstName: account?.firstName ?? user.firstName ?? "",
+              lastName: account?.lastName ?? user.lastName ?? "",
+              email: account?.email ?? user.email,
+              phone: account?.phone ?? "",
+              hasPassword: !!account?.passwordHash,
+            }}
+          />
+        </div>
+      </section>
 
       {/* Season rollover — the first thing a coach sees when a new season opens */}
       {rolloverTeams.length > 0 && currentSeasonYear != null && (

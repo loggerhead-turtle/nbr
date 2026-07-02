@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { loginUserAction, signupAction, type AccountState } from "@/lib/account-actions";
+import { HONEYPOT_FIELD } from "@/lib/spam-constants";
 
 const initial: AccountState = {};
 
@@ -43,9 +44,14 @@ export function SignupForm({ next }: { next?: string }) {
     <form action={action} className="card mx-auto mt-10 max-w-md space-y-4 p-6">
       <h1 className="text-xl font-bold text-navy-900">Create your account</h1>
       <p className="text-sm text-slate-500">
-        Coaches and team reps: create an account to claim your team and find scrimmages.
+        Create an account to claim your team, find scrimmages, and manage your profile.
       </p>
       <input type="hidden" name="next" value={next ?? ""} />
+      {/* Honeypot: hidden from real users; bots that fill it are rejected. */}
+      <div aria-hidden="true" className="absolute left-[-9999px] h-0 w-0 overflow-hidden">
+        <label htmlFor={HONEYPOT_FIELD}>Company website</label>
+        <input id={HONEYPOT_FIELD} name={HONEYPOT_FIELD} type="text" tabIndex={-1} autoComplete="off" />
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="label" htmlFor="firstName">First name</label>
@@ -68,6 +74,10 @@ export function SignupForm({ next }: { next?: string }) {
         <label className="label" htmlFor="password">Password</label>
         <input id="password" name="password" type="password" required minLength={8} className="input" autoComplete="new-password" />
         <p className="mt-1 text-xs text-slate-500">At least 8 characters.</p>
+      </div>
+      <div>
+        <label className="label" htmlFor="confirmPassword">Confirm password</label>
+        <input id="confirmPassword" name="confirmPassword" type="password" required minLength={8} className="input" autoComplete="new-password" />
       </div>
       <p className="text-xs text-slate-500">
         Your email and phone are kept private. They’re only shared with other registered users if
