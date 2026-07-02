@@ -733,7 +733,16 @@ export async function repairCrossAgeMerge(finding: BadMergeFinding): Promise<num
   return moved;
 }
 
-/** Remove self-games and duplicate matchups (same teams + same day) for a team. */
+/** Remove self-games and duplicate matchups (same teams + same day) for a team.
+ *
+ *  Doubleheader-aware: two games between the same teams on one day are a real
+ *  doubleheader when they came from the SAME team's schedule scrape (grouped by
+ *  Game.sourceTeamId), and only a cross-team duplicate when they came from
+ *  different sides. So within an (opponent, day) group we keep the largest
+ *  single-source set of legs — that's one team's authoritative count — and delete
+ *  the other side's duplicate copies. Rows with no source (manual entries and
+ *  pre-scrape-stamp legacy rows) can't be told apart as legs, so an all-unsourced
+ *  group collapses to one, preserving the original cleanup behavior. */
 export async function dedupeTeamGames(teamId: string): Promise<number> {
   const games = await prisma.game.findMany({
     where: { OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] },
@@ -743,6 +752,7 @@ export async function dedupeTeamGames(teamId: string): Promise<number> {
       awayTeamId: true,
       playedAt: true,
       createdAt: true,
+      sourceTeamId: true,
       homeTeam: { select: { name: true, isGhost: true } },
       awayTeam: { select: { name: true, isGhost: true } },
     },
@@ -770,23 +780,65 @@ export async function dedupeTeamGames(teamId: string): Promise<number> {
     else groups.set(key, [g]);
   }
 
+  const oppOf = (g: (typeof games)[number]) => (g.homeTeamId === teamId ? g.awayTeam : g.homeTeam);
+
   for (const gs of groups.values()) {
     if (gs.length <= 1) continue;
-    // Keep the best representative: prefer the game whose opponent is a VERIFIED
-    // (non-ghost) team, then the earliest recorded. Delete the rest.
-    gs.sort((a, b) => {
-      const oppA = a.homeTeamId === teamId ? a.awayTeam : a.homeTeam;
-      const oppB = b.homeTeamId === teamId ? b.awayTeam : b.homeTeam;
-      if (oppA.isGhost !== oppB.isGhost) return oppA.isGhost ? 1 : -1;
-      return a.createdAt < b.createdAt ? -1 : 1;
-    });
-    for (const g of gs.slice(1)) toDelete.push(g.id);
+
+    // Split into per-source leg sets; a source with more rows listed more legs
+    // (a doubleheader). Unsourced rows can't be distinguished as legs, so they're
+    // only ever duplicate candidates — never a leg set to preserve.
+    const bySource = new Map<string, typeof gs>();
+    for (const g of gs) {
+      if (!g.sourceTeamId) continue;
+      const arr = bySource.get(g.sourceTeamId);
+      if (arr) arr.push(g);
+      else bySource.set(g.sourceTeamId, [g]);
+    }
+
+    // Keeper set: the largest single-source leg set (tie → the one whose opponent
+    // is a VERIFIED team, then earliest). If nothing is sourced, fall back to the
+    // original "keep one representative" collapse.
+    let keep: typeof gs;
+    if (bySource.size > 0) {
+      const sets = [...bySource.values()].sort((a, b) => {
+        if (a.length !== b.length) return b.length - a.length;
+        const gA = oppOf(a[0]!).isGhost ? 1 : 0;
+        const gB = oppOf(b[0]!).isGhost ? 1 : 0;
+        if (gA !== gB) return gA - gB;
+        return a[0]!.createdAt < b[0]!.createdAt ? -1 : 1;
+      });
+      keep = sets[0]!;
+    } else {
+      const sorted = [...gs].sort((a, b) => {
+        if (oppOf(a).isGhost !== oppOf(b).isGhost) return oppOf(a).isGhost ? 1 : -1;
+        return a.createdAt < b.createdAt ? -1 : 1;
+      });
+      keep = [sorted[0]!];
+    }
+
+    const keepIds = new Set(keep.map((g) => g.id));
+    for (const g of gs) if (!keepIds.has(g.id)) toDelete.push(g.id);
   }
 
   if (toDelete.length) {
     await prisma.game.deleteMany({ where: { id: { in: toDelete } } });
   }
   return toDelete.length;
+}
+
+/**
+ * Delete "TBD" placeholder-opponent ghosts and, via cascade, their games. These
+ * are unscheduled slots GameChanger lists as "TBD" (often with a date appended)
+ * that can never be matched to a real team. The scraper now drops them on the way
+ * in; this clears the ones already stored. Only ghost rows are touched. Returns
+ * the number of teams deleted.
+ */
+export async function deleteTbdTeams(): Promise<number> {
+  const res = await prisma.team.deleteMany({
+    where: { isGhost: true, name: { startsWith: "tbd", mode: "insensitive" } },
+  });
+  return res.count;
 }
 
 /**
