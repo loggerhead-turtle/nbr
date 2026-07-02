@@ -1,17 +1,45 @@
 import { getDuplicateCandidates } from "@/lib/duplicates";
 import { DuplicateReview } from "@/components/admin/duplicate-review";
 import { MergeByConfidence } from "@/components/admin/merge-by-confidence";
+import { DuplicateFilter } from "@/components/admin/duplicate-filter";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Possible duplicates", robots: { index: false } };
 
-export default async function DuplicatesPage() {
-  const pairs = await getDuplicateCandidates(60);
+/** Parse a 1–100 confidence bound from a query param, or null if absent/invalid. */
+function parsePct(v: string | undefined): number | null {
+  if (v == null || v.trim() === "") return null;
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.max(1, Math.min(100, n)) : null;
+}
+
+export default async function DuplicatesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ min?: string; max?: string }>;
+}) {
+  const sp = await searchParams;
+  const minPct = parsePct(sp.min);
+  const maxPct = parsePct(sp.max);
+  const filtering = minPct != null || maxPct != null;
+
+  const pairs = await getDuplicateCandidates({ limit: 60, minPct, maxPct });
   // Merge-confidence values of the mergeable (non-disqualified) listed pairs,
   // so the threshold control can show a live count.
   const confidences = pairs
     .map((p) => p.mergeConfidence)
     .filter((c): c is number => c != null);
+
+  const rangeLabel =
+    minPct != null && maxPct != null
+      ? minPct === maxPct
+        ? `${minPct}%`
+        : `${minPct}–${maxPct}%`
+      : minPct != null
+        ? `≥ ${minPct}%`
+        : maxPct != null
+          ? `≤ ${maxPct}%`
+          : null;
 
   return (
     <div>
@@ -53,8 +81,16 @@ export default async function DuplicatesPage() {
           merge there and the phantom shared games (and this false pairing) disappear.
         </p>
       </div>
+      <DuplicateFilter min={minPct} max={maxPct} />
       <MergeByConfidence confidences={confidences} />
-      <DuplicateReview initialPairs={pairs} />
+      {filtering && (
+        <p className="mb-3 text-sm text-slate-500">
+          Showing {pairs.length} pair{pairs.length === 1 ? "" : "s"} at{" "}
+          <span className="font-semibold text-navy-800">{rangeLabel}</span> merge confidence
+          {pairs.length >= 60 && " (first 60)"} — scanned the strongest-evidence candidates first.
+        </p>
+      )}
+      <DuplicateReview key={`${minPct ?? ""}-${maxPct ?? ""}`} initialPairs={pairs} />
     </div>
   );
 }

@@ -451,141 +451,177 @@ export async function getDuplicateMergesAtLeast(
   minPct: number,
   limit = 300,
 ): Promise<{ sourceId: string; targetId: string }[]> {
-  const pairs = await getDuplicateCandidates(limit);
-  return pairs
-    .filter((p) => pairMeetsThreshold(p, minPct))
-    .map((p) => ({ sourceId: p.b.id, targetId: p.a.id }));
+  const pairs = await getDuplicateCandidates({ limit, scan: limit, minPct });
+  return pairs.map((p) => ({ sourceId: p.b.id, targetId: p.a.id }));
 }
 
-export async function getDuplicateCandidates(limit = 60): Promise<DupPair[]> {
+/** Score a single candidate pair into a full DupPair (or null if a team is gone). */
+async function buildDupPair(aId: string, bId: string): Promise<DupPair | null> {
+  const [ra, rb] = await Promise.all([loadDupTeam(aId), loadDupTeam(bId)]);
+  if (!ra || !rb) return null;
+
+  const commonGames: SharedGame[] = [];
+  for (const [key, ag] of ra.byKey) {
+    const bg = rb.byKey.get(key);
+    if (!bg) continue;
+    commonGames.push({
+      opponent: ag.opponent,
+      date: ag.date,
+      aUs: ag.us,
+      aThem: ag.them,
+      bUs: bg.us,
+      bThem: bg.them,
+      scoresMatch: ag.us === bg.us && ag.them === bg.them,
+      scoresClose: scoresWithinTolerance(ag.us, ag.them, bg.us, bg.them),
+    });
+  }
+
+  const keepA =
+    (ra.team.gcTeamId ? 1 : 0) - (rb.team.gcTeamId ? 1 : 0) || ra.team.totalGames - rb.team.totalGames;
+  const a = keepA >= 0 ? ra.team : rb.team;
+  const b = keepA >= 0 ? rb.team : ra.team;
+
+  // Game-overlap breakdown. commonGames.length = keys present on both rows
+  // (same opponent + date); the rest of each row's keys are unique games.
+  const exact = commonGames.filter((g) => g.scoresMatch).length;
+  const close = commonGames.filter((g) => g.scoresClose).length; // includes exact
+  const diffScore = commonGames.length - close;
+  const raUnique = ra.byKey.size - commonGames.length;
+  const rbUnique = rb.byKey.size - commonGames.length;
+  const overlap: DupOverlap = {
+    exact,
+    close,
+    diffScore,
+    uniqueA: keepA >= 0 ? raUnique : rbUnique,
+    uniqueB: keepA >= 0 ? rbUnique : raUnique,
+  };
+
+  const confidence = scoreMerge({
+    nameA: a.name,
+    nameB: b.name,
+    // Fall back to the age stated in the name when the DB column is unset, so a
+    // "… 14U" ghost/contaminated row is correctly read as U14 and never looks
+    // like a match for a U12. This is what makes the age hard-gate actually fire.
+    ageA: a.ageGroup ?? ageGroupFromName(a.name),
+    ageB: b.ageGroup ?? ageGroupFromName(b.name),
+    cityA: a.city,
+    cityB: b.city,
+    stateA: a.city ? a.state : null,
+    stateB: b.city ? b.state : null,
+    coachesA: a.coaches,
+    coachesB: b.coaches,
+    // Closely-matching games (same opponent + date, score within tolerance) are
+    // the "same team" proof, so feed that count to the scorer.
+    sharedGameCount: close,
+    regionStatesA: a.regionStates,
+    regionStatesB: b.regionStates,
+  });
+
+  // 3+ closely-matching games (same opponent + date, score within tolerance) is
+  // near-proof it's one team — slight score differences are treated as the same
+  // game (scoring typos), per the matching spec.
+  const strong = close >= 3;
+  let recommendation: DupRecommendation;
+  if (confidence.disqualified) {
+    // Different stated ages can't be the same team. If they nonetheless share
+    // games, that's the fingerprint of a bad cross-age merge (one row absorbed
+    // the other age's games) — route to the Bad merges page, never merge here.
+    recommendation = {
+      kind: "different-age",
+      note:
+        close > 0
+          ? "Different ages — NOT a duplicate. The shared games come from a bad cross-age merge; fix it on the Bad merges page, don't merge these."
+          : "Different ages — not the same team.",
+    };
+  } else if (strong && overlap.uniqueB === 0 && b.totalGames > 0) {
+    recommendation = {
+      kind: "delete-safe",
+      deleteId: b.id,
+      note: `All ${close} of “${b.name}”’s games are already on “${a.name}” — deleting it loses nothing.`,
+    };
+  } else if (strong) {
+    recommendation = {
+      kind: "merge",
+      note: `${close} closely-matching shared games — almost certainly the same team. Merge fully combines them.`,
+    };
+  } else {
+    recommendation = {
+      kind: "review",
+      note:
+        close === 0
+          ? `No closely-matching shared games — verify before acting.`
+          : `Only ${close} closely-matching shared game${close === 1 ? "" : "s"} — need 3+ to be confident. Check below.`,
+    };
+  }
+
+  // Game-overlap merge confidence (the % the bulk threshold compares against).
+  // When it's below 100 and still mergeable, spell out why right in the note so
+  // the admin can look closer before merging.
+  const mc = mergeConfidenceFrom(overlap, confidence.disqualified);
+  if (!confidence.disqualified && mc.pct != null) {
+    recommendation.note +=
+      mc.pct >= 100
+        ? ` Merge confidence 100% — every shared game matches and the duplicate has no extra games.`
+        : ` Merge confidence ${mc.pct}% — ${mc.reasons.join("; ")}.`;
+  }
+
+  return {
+    a,
+    b,
+    commonGames,
+    confidence,
+    overlap,
+    recommendation,
+    mergeConfidence: mc.pct,
+    mergeReasons: mc.reasons,
+  };
+}
+
+export interface DuplicateQuery {
+  /** Max pairs to return (default 60). */
+  limit?: number;
+  /**
+   * How many candidates to score before filtering (default = limit). Raise this
+   * when filtering by confidence so lower levels — which sort below the top of
+   * the list — can still be found without scoring the entire backlog.
+   */
+  scan?: number;
+  /** Only include pairs with merge confidence ≥ this (disqualified excluded). */
+  minPct?: number | null;
+  /** Only include pairs with merge confidence ≤ this (disqualified excluded). */
+  maxPct?: number | null;
+}
+
+export async function getDuplicateCandidates(query: number | DuplicateQuery = 60): Promise<DupPair[]> {
+  const opts: DuplicateQuery = typeof query === "number" ? { limit: query } : query;
+  const limit = opts.limit ?? 60;
+  const minPct = opts.minPct ?? null;
+  const maxPct = opts.maxPct ?? null;
+  const filtering = minPct != null || maxPct != null;
+  // With a confidence filter we scan deeper (matches can sit past the top slots);
+  // unfiltered we only score what we'll show.
+  const scan = Math.max(limit, opts.scan ?? (filtering ? 500 : limit));
+
   const pairs = await getCandidatePairs();
   const out: DupPair[] = [];
-  for (const [aId, bId] of pairs.slice(0, limit)) {
-    const [ra, rb] = await Promise.all([loadDupTeam(aId), loadDupTeam(bId)]);
-    if (!ra || !rb) continue;
-
-    const commonGames: SharedGame[] = [];
-    for (const [key, ag] of ra.byKey) {
-      const bg = rb.byKey.get(key);
-      if (!bg) continue;
-      commonGames.push({
-        opponent: ag.opponent,
-        date: ag.date,
-        aUs: ag.us,
-        aThem: ag.them,
-        bUs: bg.us,
-        bThem: bg.them,
-        scoresMatch: ag.us === bg.us && ag.them === bg.them,
-        scoresClose: scoresWithinTolerance(ag.us, ag.them, bg.us, bg.them),
-      });
+  for (const [aId, bId] of pairs.slice(0, scan)) {
+    const dp = await buildDupPair(aId, bId);
+    if (!dp) continue;
+    if (filtering) {
+      // Disqualified pairs have no merge confidence — a confidence filter hides them.
+      if (dp.mergeConfidence == null) continue;
+      if (minPct != null && dp.mergeConfidence < minPct) continue;
+      if (maxPct != null && dp.mergeConfidence > maxPct) continue;
     }
-
-    const keepA =
-      (ra.team.gcTeamId ? 1 : 0) - (rb.team.gcTeamId ? 1 : 0) || ra.team.totalGames - rb.team.totalGames;
-    const a = keepA >= 0 ? ra.team : rb.team;
-    const b = keepA >= 0 ? rb.team : ra.team;
-
-    // Game-overlap breakdown. commonGames.length = keys present on both rows
-    // (same opponent + date); the rest of each row's keys are unique games.
-    const exact = commonGames.filter((g) => g.scoresMatch).length;
-    const close = commonGames.filter((g) => g.scoresClose).length; // includes exact
-    const diffScore = commonGames.length - close;
-    const raUnique = ra.byKey.size - commonGames.length;
-    const rbUnique = rb.byKey.size - commonGames.length;
-    const overlap: DupOverlap = {
-      exact,
-      close,
-      diffScore,
-      uniqueA: keepA >= 0 ? raUnique : rbUnique,
-      uniqueB: keepA >= 0 ? rbUnique : raUnique,
-    };
-
-    const confidence = scoreMerge({
-      nameA: a.name,
-      nameB: b.name,
-      // Fall back to the age stated in the name when the DB column is unset, so a
-      // "… 14U" ghost/contaminated row is correctly read as U14 and never looks
-      // like a match for a U12. This is what makes the age hard-gate actually fire.
-      ageA: a.ageGroup ?? ageGroupFromName(a.name),
-      ageB: b.ageGroup ?? ageGroupFromName(b.name),
-      cityA: a.city,
-      cityB: b.city,
-      stateA: a.city ? a.state : null,
-      stateB: b.city ? b.state : null,
-      coachesA: a.coaches,
-      coachesB: b.coaches,
-      // Closely-matching games (same opponent + date, score within tolerance) are
-      // the "same team" proof, so feed that count to the scorer.
-      sharedGameCount: close,
-      regionStatesA: a.regionStates,
-      regionStatesB: b.regionStates,
-    });
-
-    // 3+ closely-matching games (same opponent + date, score within tolerance) is
-    // near-proof it's one team — slight score differences are treated as the same
-    // game (scoring typos), per the matching spec.
-    const strong = close >= 3;
-    let recommendation: DupRecommendation;
-    if (confidence.disqualified) {
-      // Different stated ages can't be the same team. If they nonetheless share
-      // games, that's the fingerprint of a bad cross-age merge (one row absorbed
-      // the other age's games) — route to the Bad merges page, never merge here.
-      recommendation = {
-        kind: "different-age",
-        note:
-          close > 0
-            ? "Different ages — NOT a duplicate. The shared games come from a bad cross-age merge; fix it on the Bad merges page, don't merge these."
-            : "Different ages — not the same team.",
-      };
-    } else if (strong && overlap.uniqueB === 0 && b.totalGames > 0) {
-      recommendation = {
-        kind: "delete-safe",
-        deleteId: b.id,
-        note: `All ${close} of “${b.name}”’s games are already on “${a.name}” — deleting it loses nothing.`,
-      };
-    } else if (strong) {
-      recommendation = {
-        kind: "merge",
-        note: `${close} closely-matching shared games — almost certainly the same team. Merge fully combines them.`,
-      };
-    } else {
-      recommendation = {
-        kind: "review",
-        note:
-          close === 0
-            ? `No closely-matching shared games — verify before acting.`
-            : `Only ${close} closely-matching shared game${close === 1 ? "" : "s"} — need 3+ to be confident. Check below.`,
-      };
-    }
-
-    // Game-overlap merge confidence (the % the bulk threshold compares against).
-    // When it's below 100 and still mergeable, spell out why right in the note so
-    // the admin can look closer before merging.
-    const mc = mergeConfidenceFrom(overlap, confidence.disqualified);
-    if (!confidence.disqualified && mc.pct != null) {
-      recommendation.note +=
-        mc.pct >= 100
-          ? ` Merge confidence 100% — every shared game matches and the duplicate has no extra games.`
-          : ` Merge confidence ${mc.pct}% — ${mc.reasons.join("; ")}.`;
-    }
-
-    out.push({
-      a,
-      b,
-      commonGames,
-      confidence,
-      overlap,
-      recommendation,
-      mergeConfidence: mc.pct,
-      mergeReasons: mc.reasons,
-    });
+    out.push(dp);
   }
   // Real candidates first; different-age (disqualified) pairs sink to the bottom
   // — they can never be merged here — then by merge confidence, then shared games.
-  return out.sort(
+  out.sort(
     (x, y) =>
       Number(x.confidence.disqualified) - Number(y.confidence.disqualified) ||
       (y.mergeConfidence ?? -1) - (x.mergeConfidence ?? -1) ||
       y.commonGames.length - x.commonGames.length,
   );
+  return out.slice(0, limit);
 }
