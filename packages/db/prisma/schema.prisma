@@ -347,6 +347,42 @@ model GameMergeCandidate {
   @@index([status])
 }
 
+// A run of the background duplicate-backlog merge (worker-driven). Records the
+// confidence threshold used and how many pairs were merged, so an admin can
+// watch progress and audit what happened on the Duplicates backlog page.
+model DuplicateMergeRun {
+  id            String    @id @default(cuid())
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  status        RunStatus @default(RUNNING)
+  // Minimum merge confidence (%) a pair needed to be merged in this run.
+  minConfidence Int
+  merged        Int       @default(0)
+  scanned       Int       @default(0)
+  error         String?
+
+  logs DuplicateMergeLog[]
+
+  @@index([startedAt])
+}
+
+// One folded-in duplicate: which record merged into which, at what confidence.
+model DuplicateMergeLog {
+  id         String            @id @default(cuid())
+  runId      String
+  run        DuplicateMergeRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  mergedAt   DateTime          @default(now())
+  // The kept (verified) team the duplicate folded into.
+  keptTeamId String?
+  keptName   String
+  // The duplicate (ghost) record that was removed.
+  mergedName String
+  confidence Int
+  gamesMoved Int               @default(0)
+
+  @@index([runId, mergedAt])
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Phase 2 — users / claims / reports / scrimmage.
 // Defined now so they require only additive migrations; not wired into the MVP UI.

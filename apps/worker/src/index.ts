@@ -17,6 +17,7 @@ import { runBacktest } from "./ratings/runBacktest.js";
 import { runAgeDiagnostics } from "./ratings/runAgeDiagnostics.js";
 import { runFindBadMerges } from "./maintenance/findBadMerges.js";
 import { runCleanGhosts } from "./maintenance/cleanGhosts.js";
+import { runMergeDuplicates } from "./maintenance/mergeDuplicates.js";
 
 async function main() {
   const command = process.argv[2];
@@ -60,6 +61,9 @@ async function main() {
       break;
     case "clean-ghosts":
       await runCleanGhosts();
+      break;
+    case "merge-duplicates":
+      await runMergeDuplicates(process.argv[3], process.argv[4]);
       break;
     default:
       console.error(

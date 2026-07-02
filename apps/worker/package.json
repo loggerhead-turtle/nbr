@@ -9,6 +9,7 @@
     "scrape-new": "tsx src/index.ts scrape-new",
     "scrape-all": "tsx src/index.ts scrape-all",
     "clean-ghosts": "tsx src/index.ts clean-ghosts",
+    "merge-duplicates": "tsx src/index.ts merge-duplicates",
     "maxpreps": "tsx src/index.ts maxpreps",
     "geocode": "tsx src/index.ts geocode",
     "reconcile": "tsx src/index.ts reconcile",

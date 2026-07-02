@@ -83,3 +83,14 @@ export async function triggerCleanGhosts(): Promise<boolean> {
 export async function triggerRecompute(): Promise<boolean> {
   return postJob("pnpm --filter @nbr/worker recompute");
 }
+
+/**
+ * Background duplicate-backlog merge: fold every pair at/above `minPct` confidence
+ * into its kept record. `runId` (a cuid) ties the worker's progress + log to the
+ * run row the web app created, so the admin page can watch it.
+ */
+export async function triggerMergeDuplicates(minPct: number, runId: string): Promise<boolean> {
+  const pct = Math.max(1, Math.min(100, Math.round(minPct)));
+  if (!/^[a-z0-9]+$/i.test(runId)) return false;
+  return postJob(`pnpm --filter @nbr/worker merge-duplicates ${pct} ${runId}`);
+}

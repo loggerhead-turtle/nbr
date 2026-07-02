@@ -94,3 +94,29 @@ export type {
   GameMergeStoredGame,
   GameMergeResolution,
 } from "./game-merge";
+export {
+  countDuplicateCandidates,
+  getDuplicateAuditSummary,
+  mergeConfidenceFrom,
+  pairMeetsThreshold,
+  getDuplicateMergesAtLeast,
+  getDuplicateCandidates,
+  createDuplicateMergeRun,
+  finishDuplicateMergeRun,
+  getRecentDuplicateMergeRuns,
+  getDuplicateMergeLogs,
+  mergeDuplicateBacklog,
+} from "./duplicates";
+export type {
+  DuplicateAuditSummary,
+  DupGame,
+  SharedGame,
+  DupTeam,
+  DupOverlap,
+  DupRecommendation,
+  DupPair,
+  MergeConfidence,
+  DuplicateQuery,
+  DuplicateMergeRunView,
+  DuplicateMergeLogView,
+} from "./duplicates";

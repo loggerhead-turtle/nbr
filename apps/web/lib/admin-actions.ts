@@ -50,6 +50,7 @@ import {
   triggerRescrapeAll,
   triggerCleanGhosts,
   triggerRecompute,
+  triggerMergeDuplicates,
 } from "./render-jobs";
 import type { MergeTargetOption } from "./merge-types";
 import {
@@ -70,7 +71,13 @@ import {
   isAdmin,
 } from "./auth";
 import { isCurrentUserScraper, getCurrentUser, hashPassword } from "./user-auth";
-import { getDuplicateMergesAtLeast, countDuplicateCandidates } from "./duplicates";
+import {
+  getDuplicateMergesAtLeast,
+  countDuplicateCandidates,
+  createDuplicateMergeRun,
+  finishDuplicateMergeRun,
+} from "./duplicates";
+import { DUP_BACKLOG_CONF_KEY } from "./site-settings";
 import { formatUsd } from "./format";
 
 export interface ActionState {
@@ -907,6 +914,51 @@ export async function mergeDuplicatesByConfidenceAction(
       (remaining > 0
         ? ` ${remaining} possible duplicate${remaining === 1 ? "" : "s"} remain — run it again to keep going.`
         : ""),
+  };
+}
+
+/**
+ * Start a background duplicate-backlog merge on the worker at the chosen minimum
+ * confidence. Remembers the level, refuses to start if one is already running,
+ * creates the run row, and dispatches the worker job (marking the run FAILED if
+ * the worker isn't configured so the page shows why).
+ */
+export async function startDuplicateBacklogAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  await requireAdmin();
+  const minPct = Math.max(1, Math.min(100, Math.round(Number(formData.get("minPct")) || 100)));
+
+  await prisma.appSetting.upsert({
+    where: { key: DUP_BACKLOG_CONF_KEY },
+    create: { key: DUP_BACKLOG_CONF_KEY, value: String(minPct) },
+    update: { value: String(minPct) },
+  });
+
+  const running = await prisma.duplicateMergeRun.findFirst({ where: { status: "RUNNING" } });
+  if (running) {
+    return { error: "A backlog merge is already running. Wait for it to finish before starting another." };
+  }
+
+  const run = await createDuplicateMergeRun(minPct);
+  const dispatched = await triggerMergeDuplicates(minPct, run.id);
+  if (!dispatched) {
+    await finishDuplicateMergeRun(run.id, {
+      status: "FAILED",
+      error: "Worker not configured (RENDER_API_KEY / RENDER_WORKER_SERVICE_ID unset).",
+    });
+    revalidatePath("/admin/duplicates-backlog");
+    return {
+      error:
+        "Couldn't start the worker job. Set RENDER_API_KEY and RENDER_WORKER_SERVICE_ID (see server logs).",
+    };
+  }
+
+  revalidatePath("/admin/duplicates-backlog");
+  return {
+    ok: true,
+    message: `Backlog merge started at ≥${minPct}% confidence — merges appear below as the worker runs. Refresh to update.`,
   };
 }
 
