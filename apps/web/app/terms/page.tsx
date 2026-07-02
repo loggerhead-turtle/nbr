@@ -19,10 +19,10 @@ export default function TermsPage() {
 
       <h2>1. The Service</h2>
       <p>
-        The Service provides statistical ratings and rankings of amateur baseball teams, a
-        tournament pool-generation tool, and related features. Ratings are computed estimates
-        derived from publicly available game results and information submitted by users. The
-        Service is provided for general informational and entertainment purposes only.
+        The Service provides the National Baseball Ratings (NBR) — statistical estimates of
+        amateur baseball team strength — a tournament pool-generation tool, and related features.
+        The NBR is computed from publicly available game results and information submitted by
+        users. The Service is provided for general informational and entertainment purposes only.
       </p>
 
       <h2>2. No Affiliation with Third Parties</h2>
@@ -36,7 +36,7 @@ export default function TermsPage() {
 
       <h2>3. Accuracy; No Warranties</h2>
       <p>
-        THE SERVICE, INCLUDING ALL RATINGS, RANKINGS, RECORDS, AND POOL ASSIGNMENTS, IS PROVIDED
+        THE SERVICE, INCLUDING THE NBR, ALL RECORDS, AND POOL ASSIGNMENTS, IS PROVIDED
         “AS IS” AND “AS AVAILABLE” WITHOUT WARRANTIES OF ANY KIND, WHETHER EXPRESS, IMPLIED, OR
         STATUTORY, INCLUDING WITHOUT LIMITATION ANY IMPLIED WARRANTIES OF MERCHANTABILITY,
         FITNESS FOR A PARTICULAR PURPOSE, TITLE, ACCURACY, OR NON-INFRINGEMENT.

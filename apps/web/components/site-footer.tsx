@@ -8,16 +8,16 @@ export function SiteFooter() {
           <div>
             <p className="text-sm font-bold text-navy-900">National Baseball Ratings</p>
             <p className="mt-2 text-sm text-slate-500">
-              Independent, data-driven ratings for amateur baseball teams — built to
+              An independent, data-driven NBR for amateur baseball teams — built to
               make tournament pools fair and to help teams find balanced scrimmages.
             </p>
           </div>
           <FooterCol
             title="Explore"
             links={[
-              { href: "/", label: "Team Ratings" },
+              { href: "/", label: "Team NBR" },
               { href: "/pools", label: "Pool Generator" },
-              { href: "/about", label: "How Ratings Work" },
+              { href: "/about", label: "How the NBR Works" },
             ]}
           />
           <FooterCol
@@ -37,9 +37,9 @@ export function SiteFooter() {
         </div>
         <div className="mt-8 border-t border-slate-100 pt-6 text-xs text-slate-400">
           <p>
-            © {new Date().getFullYear()} National Baseball Ratings. Ratings are estimates
-            provided “as is” for informational purposes only. Not affiliated with, endorsed
-            by, or sponsored by GameChanger Media, Inc. or any league.
+            © {new Date().getFullYear()} National Baseball Ratings. The NBR is a set of
+            estimates provided “as is” for informational purposes only. Not affiliated with,
+            endorsed by, or sponsored by GameChanger Media, Inc. or any league.
           </p>
         </div>
       </div>

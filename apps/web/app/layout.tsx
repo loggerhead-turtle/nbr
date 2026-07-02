@@ -8,11 +8,11 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: {
-    default: "National Baseball Ratings — Team Rankings & Tournament Pools",
+    default: "National Baseball Ratings (NBR) — Team NBR & Tournament Pools",
     template: "%s | National Baseball Ratings",
   },
   description:
-    "Independent, data-driven ratings and rankings for amateur baseball teams. Search team ratings and generate balanced tournament pools for free.",
+    "Independent, data-driven NBR for amateur baseball teams. Look up any team’s NBR and generate balanced tournament pools for free.",
   openGraph: {
     type: "website",
     siteName: "National Baseball Ratings",

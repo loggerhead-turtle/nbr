@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     ? formatRecord(team.rating.wins, team.rating.losses, team.rating.ties)
     : "";
   return {
-    title: `${team.name} — Baseball Rating & Record`,
+    title: `${team.name} — NBR & Record`,
     description: `${team.name}${team.city ? ` of ${team.city}, ${team.state}` : ""}: ${rating}${
       rec ? `, ${rec} record` : ""
     }. ${ageGroupLabel(team.ageGroup)} National Baseball Ratings.`,
@@ -144,7 +144,7 @@ export default async function TeamPage({ params }: Params) {
           />
           <Stat label="Games" value={team.rating ? String(team.rating.gamesPlayed) : "0"} />
           <Stat
-            label="Rating Deviation"
+            label="NBR Deviation"
             value={team.rating ? `±${Math.round(team.rating.rd)}` : "—"}
           />
           <Stat label="State" value={team.state} />
@@ -220,8 +220,8 @@ export default async function TeamPage({ params }: Params) {
 
       {/* Chart */}
       <div className="card mt-6 p-6">
-        <h2 className="text-lg font-bold text-navy-900">Rating history</h2>
-        <p className="mb-3 text-sm text-slate-500">How this team’s rating has moved over time.</p>
+        <h2 className="text-lg font-bold text-navy-900">NBR history</h2>
+        <p className="mb-3 text-sm text-slate-500">How this team’s NBR has moved over time.</p>
         <RatingChart points={team.ratingHistory.map((h) => ({ asOf: h.asOf, rating: h.rating }))} />
       </div>
 
