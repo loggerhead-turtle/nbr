@@ -19,8 +19,10 @@ export function MergeConfidentButton({ count }: { count: number }) {
   const onClick = () => {
     if (
       !window.confirm(
-        `Merge ${count} duplicate pair${count === 1 ? "" : "s"} the model scores at 100% confidence?\n\n` +
-          "Each folds the duplicate into the kept record and combines their games — nothing is lost, but this can't be undone.",
+        `Merge ${count} duplicate pair${count === 1 ? "" : "s"} at 100% confidence?\n\n` +
+          "These match on name, age, location, and coaches; every shared game has identical scores; " +
+          "and the duplicate's games are all already on the kept record. Each folds the duplicate into " +
+          "the kept record — nothing is lost, but this can't be undone.",
       )
     ) {
       return;
@@ -37,7 +39,7 @@ export function MergeConfidentButton({ count }: { count: number }) {
       <button
         onClick={onClick}
         disabled={pending || count === 0}
-        title="Merges every pair scored at 100% (identical name, location/coaches, and games that line up). Ratings recompute after."
+        title="Merges every pair at 100% confidence: identical name/age/location/coaches, every shared game scored identically, and the duplicate's games all already on the kept team. Ratings recompute after."
         className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
       >
         {pending ? "Merging…" : `⚡ Merge all 100% confident${count > 0 ? ` (${count})` : ""}`}

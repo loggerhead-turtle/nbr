@@ -1,4 +1,4 @@
-import { getDuplicateCandidates } from "@/lib/duplicates";
+import { getDuplicateCandidates, isConfidentMerge } from "@/lib/duplicates";
 import { DuplicateReview } from "@/components/admin/duplicate-review";
 import { MergeConfidentButton } from "@/components/admin/merge-confident-button";
 
@@ -7,9 +7,7 @@ export const metadata = { title: "Possible duplicates", robots: { index: false }
 
 export default async function DuplicatesPage() {
   const pairs = await getDuplicateCandidates(60);
-  const confidentCount = pairs.filter(
-    (p) => !p.confidence.disqualified && p.confidence.score >= 100,
-  ).length;
+  const confidentCount = pairs.filter(isConfidentMerge).length;
 
   return (
     <div>

@@ -384,9 +384,31 @@ async function loadDupTeam(
 }
 
 /**
- * The duplicate candidates the confidence model scores at a full 100% (and that
- * aren't disqualified) — the ones an admin trusts enough to merge unattended.
- * Returned in merge orientation (source folds into the kept target), matching
+ * Is this pair safe to merge unattended ("100% confident")? Every condition is a
+ * hard requirement:
+ *  1. the confidence model scores it a full 100% and doesn't disqualify it
+ *     (identical name, same age, same city/state, shared coaches, lined-up games);
+ *  2. every shared game has *identical* scores — no "close within tolerance" (≈)
+ *     and nothing that differs; and
+ *  3. the folded (ghost/merge-in) record is fully contained in the kept
+ *     (verified) one — it has no game the kept team lacks.
+ */
+export function isConfidentMerge(p: DupPair): boolean {
+  const c = p.confidence;
+  if (c.disqualified || c.score < 100) return false;
+  const o = p.overlap;
+  // (2) All shared games identical: `close` counts within-tolerance games
+  // (includes exact), so close === exact means none are merely ≈, and
+  // diffScore === 0 means none differ.
+  const allScoresExact = o.close === o.exact && o.diffScore === 0;
+  // (3) The merge-in record (b) has zero games the kept record (a) lacks.
+  const ghostFullyContained = o.uniqueB === 0;
+  return allScoresExact && ghostFullyContained;
+}
+
+/**
+ * The duplicate candidates safe to merge unattended (see isConfidentMerge),
+ * returned in merge orientation (source folds into the kept target), matching
  * the review page's keep/merge choice. Powers the bulk "merge all 100%
  * confident" action. `limit` bounds how many candidates are scored (same order
  * the review page uses: strongest evidence first).
@@ -396,7 +418,7 @@ export async function getConfidentDuplicateMerges(
 ): Promise<{ sourceId: string; targetId: string }[]> {
   const pairs = await getDuplicateCandidates(limit);
   return pairs
-    .filter((p) => !p.confidence.disqualified && p.confidence.score >= 100)
+    .filter(isConfidentMerge)
     .map((p) => ({ sourceId: p.b.id, targetId: p.a.id }));
 }
 
